@@ -13,7 +13,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
-BOT_VERSION = "bot-1.0.0"
+BOT_VERSION = "bot-1.1.0"
+MARKET = "USDT-FUTURES"
 SYMBOLS = ("SOLUSDT", "BTCUSDT", "ETHUSDT")
 TAKER_BPS = 6.0
 ROUND_TRIP_BPS = TAKER_BPS * 2
@@ -22,35 +23,62 @@ MAX_EVENTS = 80
 MAX_CLOSED = 80
 TICK_MIN_SECONDS = 0.45
 LOOP_SECONDS = 1.0
+MAX_LEVERAGE = 150
+SAFE_LEVERAGE_MAX = 9
+MIN_RISK_LEVERAGE = 10
+PROFILE_ALIASES = {"balanced": "risk"}
 
-PROFILES: dict[str, dict[str, float | int]] = {
-    "aggressive": {
-        "leverage": 50,
-        "margin_pct": 0.04,
-        "tp_bps": 26,
-        "sl_bps": 18,
-        "be_bps": 16,
-        "giveback": 0.35,
-        "max_hold": 70,
-        "impulse_bps": 12,
-        "overextend_bps": 38,
-        "cooldown": 12,
-        "max_consec_loss": 4,
-        "volume_ratio": 1.08,
-    },
-    "balanced": {
-        "leverage": 25,
-        "margin_pct": 0.03,
-        "tp_bps": 36,
-        "sl_bps": 24,
+PROFILES: dict[str, dict[str, float | int | bool]] = {
+    "safe": {
+        "safe": True,
+        "leverage_min": 5,
+        "leverage_max": 9,
+        "margin_pct": 0.05,
+        "tp_bps": 40,
+        "sl_bps": 28,
         "be_bps": 20,
         "giveback": 0.40,
-        "max_hold": 110,
+        "max_hold": 180,
         "impulse_bps": 14,
-        "overextend_bps": 42,
+        "overextend_bps": 48,
         "cooldown": 20,
         "max_consec_loss": 4,
-        "volume_ratio": 1.12,
+        "volume_ratio": 1.10,
+        "min_score": 0.55,
+    },
+    "risk": {
+        "safe": False,
+        "leverage_min": 10,
+        "leverage_max": 75,
+        "margin_pct": 0.03,
+        "tp_bps": 28,
+        "sl_bps": 16,
+        "be_bps": 16,
+        "giveback": 0.35,
+        "max_hold": 90,
+        "impulse_bps": 12,
+        "overextend_bps": 40,
+        "cooldown": 14,
+        "max_consec_loss": 4,
+        "volume_ratio": 1.10,
+        "min_score": 0.55,
+    },
+    "aggressive": {
+        "safe": False,
+        "leverage_min": 50,
+        "leverage_max": 150,
+        "margin_pct": 0.02,
+        "tp_bps": 24,
+        "sl_bps": 12,
+        "be_bps": 16,
+        "giveback": 0.30,
+        "max_hold": 55,
+        "impulse_bps": 12,
+        "overextend_bps": 36,
+        "cooldown": 10,
+        "max_consec_loss": 4,
+        "volume_ratio": 1.08,
+        "min_score": 0.60,
     },
 }
 
@@ -59,7 +87,7 @@ _state: dict[str, Any] = {}
 _persist_path: Path | None = None
 _loop_started = threading.Event()
 _ticker_fn: Callable[[str], dict[str, Any]] | None = None
-_candles_fn: Callable[[str], list[dict[str, Any]]] | None = None
+_candles_fn: Callable[..., list[dict[str, Any]]] | None = None
 _positions_fn: Callable[[], list[dict[str, Any]]] | None = None
 
 
@@ -81,11 +109,26 @@ def _num(value: Any) -> float | None:
 
 def _profile_name(name: str | None) -> str:
     raw = (name or "aggressive").strip().lower()
+    raw = PROFILE_ALIASES.get(raw, raw)
     return raw if raw in PROFILES else "aggressive"
 
 
-def _cfg(state: dict[str, Any] | None = None) -> dict[str, float | int]:
+def _cfg(state: dict[str, Any] | None = None) -> dict[str, float | int | bool]:
     return PROFILES[_profile_name((state or _state).get("profile"))]
+
+
+def _leverage_for(score: float) -> int:
+    """Safe stays below 10×. Risk/aggressive never go below 10×, never above 150×."""
+    cfg = _cfg()
+    lo = int(cfg["leverage_min"])
+    hi = int(cfg["leverage_max"])
+    floor = float(cfg.get("min_score") or 0.55)
+    span = max(1e-9, 1.0 - floor)
+    t = min(1.0, max(0.0, (float(score) - floor) / span))
+    lev = int(round(lo + (hi - lo) * t))
+    if cfg.get("safe"):
+        return max(1, min(SAFE_LEVERAGE_MAX, lev))
+    return max(MIN_RISK_LEVERAGE, min(MAX_LEVERAGE, lev))
 
 
 def _empty_state() -> dict[str, Any]:
@@ -101,6 +144,7 @@ def _empty_state() -> dict[str, Any]:
         "events": [],
         "live_signals": [],
         "live_watch": {},
+        "scan": [],
         "started_at": _utcnow(),
         "last_tick": None,
         "consecutive_losses": 0,
@@ -200,13 +244,16 @@ def _live_desk():
 def _ticker(symbol: str) -> dict[str, Any]:
     if _ticker_fn is not None:
         return _ticker_fn(symbol)
-    return _live_desk().ticker_payload(symbol, "USDT-FUTURES")
+    return _live_desk().ticker_payload(symbol, MARKET)
 
 
-def _candles(symbol: str) -> list[dict[str, Any]]:
+def _candles(symbol: str, granularity: str = "1m", limit: int = 12) -> list[dict[str, Any]]:
     if _candles_fn is not None:
-        return _candles_fn(symbol)
-    payload = _live_desk().candles_payload(symbol, "USDT-FUTURES", "1m", 8)
+        try:
+            return _candles_fn(symbol, granularity, limit)
+        except TypeError:
+            return _candles_fn(symbol)
+    payload = _live_desk().candles_payload(symbol, MARKET, granularity, limit)
     return list(payload.get("candles") or [])
 
 
@@ -341,6 +388,7 @@ def _maybe_exit_locked(now: float, mark: float) -> dict[str, Any] | None:
     hit_tp = (mark - tp) * sign >= 0
     giveback = peak > 0 and net > 0 and (peak - net) >= peak * float(_cfg()["giveback"])
     max_hold = held >= float(pos.get("max_hold") or _cfg()["max_hold"])
+    reverse = str(pos.get("reverse_reason") or "")
 
     if hit_tp:
         return _close_locked(now, mark, "Take-profit hit — banked before fade")
@@ -350,6 +398,10 @@ def _maybe_exit_locked(now: float, mark: float) -> dict[str, Any] | None:
         return _close_locked(now, mark, "Gave back the green — flattened before a loss")
     if giveback:
         return _close_locked(now, mark, "Peak fading — took profit before a loss")
+    if reverse and held >= 8:
+        if net > 0:
+            return _close_locked(now, mark, reverse)
+        return _close_locked(now, mark, reverse)
     if hit_sl:
         return _close_locked(now, mark, "Tight stop — cut before the loss grew")
     if max_hold and net > 0:
@@ -359,40 +411,134 @@ def _maybe_exit_locked(now: float, mark: float) -> dict[str, Any] | None:
     return None
 
 
-def _impulse(symbol: str) -> dict[str, Any] | None:
-    rows = _candles(symbol)
-    if len(rows) < 4:
-        return None
-    last = rows[-1]
-    prev = rows[-2]
-    older = rows[-3]
-    last_c = _num(last.get("c"))
-    prev_c = _num(prev.get("c"))
-    older_c = _num(older.get("c"))
-    last_v = _num(last.get("v")) or 0.0
-    vols = [_num(r.get("v")) or 0.0 for r in rows[:-1]]
+def _trend_5m(rows: list[dict[str, Any]]) -> tuple[str | None, float]:
+    if len(rows) < 3:
+        return None, 0.0
+    first = _num(rows[0].get("c"))
+    last = _num(rows[-1].get("c"))
+    if not first or not last:
+        return None, 0.0
+    move = ((last - first) / first) * 10000.0
+    if abs(move) < 1:
+        return "flat", move
+    return ("up" if move > 0 else "down"), move
+
+
+def _analyze_symbol(symbol: str) -> dict[str, Any]:
+    """Score a USDT-M futures market for a paper entry."""
+    cfg = _cfg()
+    result: dict[str, Any] = {
+        "symbol": symbol,
+        "category": MARKET,
+        "verdict": "SKIP",
+        "side": None,
+        "score": 0.0,
+        "leverage": None,
+        "move_bps": None,
+        "trend_5m": None,
+        "volume_ratio": None,
+        "reason": "Insufficient candles",
+    }
+    rows1 = _candles(symbol, "1m", 12)
+    if len(rows1) < 4:
+        return result
+    last_c = _num(rows1[-1].get("c"))
+    prev_c = _num(rows1[-2].get("c"))
+    older_c = _num(rows1[-3].get("c"))
+    last_v = _num(rows1[-1].get("v")) or 0.0
+    vols = [_num(row.get("v")) or 0.0 for row in rows1[:-1]]
     avg_v = sum(vols) / len(vols) if vols else 0.0
     if not last_c or not prev_c or not older_c:
-        return None
+        result["reason"] = "No 1m close"
+        return result
     move_bps = ((last_c - prev_c) / prev_c) * 10000.0
-    cfg = _cfg()
-    if abs(move_bps) < float(cfg["impulse_bps"]):
-        return None
-    if abs(move_bps) > float(cfg["overextend_bps"]):
-        return None
-    if avg_v > 0 and last_v < avg_v * float(cfg["volume_ratio"]):
-        return None
-    # Require two-bar agreement so we do not fade a single wick.
     prior = ((prev_c - older_c) / older_c) * 10000.0
+    vol_ratio = (last_v / avg_v) if avg_v else 0.0
+    result["move_bps"] = round(move_bps, 2)
+    result["volume_ratio"] = round(vol_ratio, 2)
+
+    if abs(move_bps) < float(cfg["impulse_bps"]):
+        result["reason"] = f"1m impulse {move_bps:+.1f}bps below {cfg['impulse_bps']}bps floor"
+        return result
+    if abs(move_bps) > float(cfg["overextend_bps"]):
+        result["reason"] = f"1m {move_bps:+.1f}bps overextended — no chase"
+        return result
     if prior * move_bps <= 0:
-        return None
+        result["reason"] = "1m bars disagree — wait for a clean impulse"
+        return result
+    if avg_v > 0 and vol_ratio < float(cfg["volume_ratio"]):
+        result["reason"] = f"Volume {vol_ratio:.2f}x too thin"
+        return result
+
     side = "long" if move_bps > 0 else "short"
-    return {
-        "symbol": symbol,
-        "side": side,
-        "move_bps": round(move_bps, 2),
-        "reason": f"1m impulse {move_bps:+.1f}bps · vol {last_v:.2f} vs {avg_v:.2f}",
-    }
+    score = 0.35
+    if vol_ratio >= float(cfg["volume_ratio"]):
+        score += 0.20
+    if vol_ratio >= float(cfg["volume_ratio"]) + 0.25:
+        score += 0.05
+
+    rows5 = _candles(symbol, "5m", 8)
+    trend5, _move5 = _trend_5m(rows5)
+    result["trend_5m"] = trend5
+    want = "up" if side == "long" else "down"
+    if trend5 == want:
+        score += 0.25
+    elif trend5 in {"up", "down"} and trend5 != want:
+        result["score"] = round(score, 2)
+        result["reason"] = f"5m {trend5} fights 1m {side} — skip"
+        return result
+    else:
+        score += 0.05
+
+    score += 0.10
+    tick = _ticker(symbol)
+    if _num(tick.get("mark")) or _num(tick.get("last")):
+        score += 0.05
+    result["score"] = round(min(1.0, score), 2)
+    if result["score"] < float(cfg["min_score"]):
+        result["reason"] = f"Score {result['score']} below {cfg['min_score']}"
+        return result
+
+    lev = _leverage_for(result["score"])
+    result.update(
+        {
+            "verdict": "ENTRY",
+            "side": side,
+            "leverage": lev,
+            "reason": (
+                f"{MARKET} {side} · 1m {move_bps:+.1f}bps · "
+                f"5m {trend5 or 'n/a'} · {lev}×"
+            ),
+        }
+    )
+    return result
+
+
+def _analyze_markets() -> dict[str, Any] | None:
+    scan = [_analyze_symbol(symbol) for symbol in SYMBOLS]
+    with _lock:
+        _state["scan"] = scan
+    entries = [row for row in scan if row.get("verdict") == "ENTRY"]
+    if not entries:
+        return None
+    entries.sort(key=lambda row: float(row.get("score") or 0), reverse=True)
+    return entries[0]
+
+
+def _reversal_reason(symbol: str, side: str) -> str | None:
+    rows = _candles(symbol, "1m", 8)
+    if len(rows) < 3:
+        return None
+    last_c = _num(rows[-1].get("c"))
+    prev_c = _num(rows[-2].get("c"))
+    if not last_c or not prev_c:
+        return None
+    move = ((last_c - prev_c) / prev_c) * 10000.0
+    sign = 1.0 if side == "long" else -1.0
+    against = -move * sign
+    if against >= float(_cfg()["impulse_bps"]):
+        return f"1m reversed {move:+.1f}bps — exit before it ran"
+    return None
 
 
 def _open_locked(now: float, idea: dict[str, Any], mark: float) -> dict[str, Any] | None:
@@ -407,7 +553,12 @@ def _open_locked(now: float, idea: dict[str, Any], mark: float) -> dict[str, Any
         _event("halt", _state["halt"])
         return None
     cfg = _cfg()
-    lev = float(cfg["leverage"])
+    scored = _num(idea.get("leverage"))
+    lev = int(scored) if scored else _leverage_for(float(idea.get("score") or 1))
+    if cfg.get("safe"):
+        lev = max(1, min(SAFE_LEVERAGE_MAX, lev))
+    else:
+        lev = max(MIN_RISK_LEVERAGE, min(MAX_LEVERAGE, lev))
     margin = max(1.0, min(equity * float(cfg["margin_pct"]), equity * 0.08))
     notional = margin * lev
     size = notional / mark
@@ -418,8 +569,10 @@ def _open_locked(now: float, idea: dict[str, Any], mark: float) -> dict[str, Any
     pos = {
         "id": f"p-{int(now * 1000)}",
         "symbol": idea["symbol"],
+        "category": MARKET,
         "side": side,
         "leverage": lev,
+        "score": idea.get("score"),
         "entry": mark,
         "mark": mark,
         "size": round(size, 8),
@@ -538,14 +691,23 @@ def status() -> dict[str, Any]:
             "running": bool(_state.get("running")),
             "halt": _state.get("halt"),
             "profile": _profile_name(_state.get("profile")),
+            "market": MARKET,
             "live_trading": False,
             "live_execution": False,
+            "leverage_policy": {
+                "safe_below": MIN_RISK_LEVERAGE,
+                "max": MAX_LEVERAGE,
+                "profile_min": int(_cfg()["leverage_min"]),
+                "profile_max": int(_cfg()["leverage_max"]),
+                "note": "Below 10× is safe. Risk/aggressive stay 10–150×. Futures only.",
+            },
             "note": (
-                "Paper scalper fills this book. Live UTA is monitored for take-profit "
-                "signals only — Bitget place/close stays locked."
+                "USDT-M futures paper scalper. Scans 1m/5m for entries and exits. "
+                "Live UTA signals only — Bitget place/close stays locked."
             ),
             "metrics": _metrics_locked(),
             "open": dict(_state["open"]) if isinstance(_state.get("open"), dict) else None,
+            "scan": list(_state.get("scan") or []),
             "live_signals": list(_state.get("live_signals") or []),
             "closed": closed[-12:],
             "events": events[-16:],
@@ -613,27 +775,38 @@ def tick(now: float | None = None) -> dict[str, Any]:
         except Exception:
             mark = None
 
+    reverse = None
+    if open_symbol:
+        try:
+            side = None
+            with _lock:
+                if isinstance(_state.get("open"), dict):
+                    side = str(_state["open"].get("side") or "")
+            if side:
+                reverse = _reversal_reason(open_symbol, side)
+        except Exception:
+            reverse = None
+
     with _lock:
         if isinstance(_state.get("open"), dict) and mark:
             _state["open"]["mark"] = mark
+            if reverse:
+                _state["open"]["reverse_reason"] = reverse
             _mark_open_locked(now)
             _maybe_exit_locked(now, mark)
         running = bool(_state.get("running")) and not _state.get("halt")
         already_open = isinstance(_state.get("open"), dict)
         cooldown = now < float(_state.get("cooldown_until") or 0)
 
-    if running and not already_open and not cooldown:
-        idea = None
+    idea = None
+    if running:
         try:
-            for symbol in SYMBOLS:
-                idea = _impulse(symbol)
-                if idea:
-                    break
+            idea = _analyze_markets()
         except Exception as exc:  # noqa: BLE001
             with _lock:
                 _event("warn", f"Scan skipped: {str(exc)[:160]}")
             idea = None
-        if idea:
+    if idea and not already_open and not cooldown:
             try:
                 entry_mark = _mark_price(str(idea["symbol"]))
             except Exception:

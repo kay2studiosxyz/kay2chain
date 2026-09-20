@@ -17,7 +17,7 @@ This folder mirrors the desk files changed for **live UTA portfolio streaming**.
 | `GET /api/desk` | Combined summary |
 | `GET /api/desk/stream` | **SSE** (~1s) — `event: desk` with the same payload as `/api/desk` |
 | `GET /api/fills` | Recent Bitget fills for chart **buy/sell bubbles** |
-| `GET/POST /api/bot` | In-app **paper scalper** + live UTA take-profit signals (never places Bitget orders) |
+| `GET/POST /api/bot` | USDT-M futures paper scalper — 1m/5m entries/exits, 10–150× (below 10× is safe) |
 
 The desk UI opens `/api/desk/stream` via `EventSource` and falls back to REST polling every 3s if the stream drops. LIVE order placement stays locked unless `BITBOT_LIVE_OK` is explicitly unlocked on the NUC.
 

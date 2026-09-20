@@ -21,7 +21,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-DESK_VERSION = "desk-2.2.0"
+DESK_VERSION = "desk-2.2.1"
 DESK_MODE = "PAPER_WATCH"
 CACHE_TTL_SECONDS = 3.0
 TICKER_TTL_SECONDS = 1.5
@@ -924,8 +924,10 @@ def trade_preview(body: dict[str, Any] | None) -> dict[str, Any]:
     if order_type not in {"market", "limit"}:
         raise ValueError("order_type must be market or limit")
     leverage = _num(body.get("leverage")) or 1.0
-    if leverage < 1 or leverage > 125:
-        raise ValueError("leverage out of range")
+    if cat == "SPOT":
+        raise ValueError("Futures only")
+    if leverage < 1 or leverage > 150:
+        raise ValueError("leverage out of range (1–150×). Below 10× is safe.")
     size_coins = _num(body.get("size") or body.get("qty") or body.get("size_coins"))
     notional = _num(body.get("notional") or body.get("usdt") or body.get("size_usdt"))
     limit_price = _num(body.get("price") or body.get("limit_price"))

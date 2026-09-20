@@ -820,7 +820,7 @@ def make_handler(store):
                 self.end_headers()
                 deadline = time.monotonic() + 60
                 self.wfile.write(b"retry: 1500\n\n")
-                self.wfile.write(b"event: hello\ndata: {\"service\":\"bitbot-desk\",\"version\":\"desk-2.2.0\"}\n\n")
+                self.wfile.write(b"event: hello\ndata: {\"service\":\"bitbot-desk\",\"version\":\"desk-2.2.1\"}\n\n")
                 self.wfile.flush()
                 while time.monotonic() < deadline:
                     self.wfile.write(b"event: desk\ndata: " + payload + b"\n\n")

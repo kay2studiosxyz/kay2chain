@@ -9,7 +9,7 @@ Mode default is **PAPER_WATCH**. LIVE order placement stays locked unless
 
 ### `GET /api/health`
 ```json
-{ "ok": true, "service": "bitbot-dashboard", "mode": "PAPER_WATCH", "version": "desk-2.2.0", "ts": "…", "live_trading": false, "live_lock": "…" }
+{ "ok": true, "service": "bitbot-dashboard", "mode": "PAPER_WATCH", "version": "desk-2.2.1", "ts": "…", "live_trading": false, "live_lock": "…" }
 ```
 
 ### `GET /api/desk`
@@ -53,10 +53,11 @@ OHLCV from Bitget public candles. Granularity: `1m` `5m` `15m` `1H` `4H` (aliase
 ```
 
 ### `GET /api/bot` / `POST /api/bot`
-In-app paper scalper + live UTA take-profit **signals**. Paper fills only.
+In-app USDT-M futures paper scalper. Scans 1m + 5m for entries/exits. Paper fills only.
 
-`GET` returns `{ running, profile, metrics, open, live_signals, closed, events }`.
-`POST` body `{ "action": "start"|"stop"|"flatten"|"profile", "profile"?: "aggressive"|"balanced" }`.
+`GET` returns `{ running, profile, market, leverage_policy, scan, metrics, open, live_signals, closed, events }`.
+Profiles: `safe` (<10×), `risk` (10–75×), `aggressive` (50–150×). Below 10× is safe. Cap 150×.
+`POST` body `{ "action": "start"|"stop"|"flatten"|"profile", "profile"?: "safe"|"risk"|"aggressive" }`.
 
 Live signals (`BANK_NOW`, `URGENT_TP`, `PROTECT`, …) are advice only. This endpoint never calls Bitget place/close.
 

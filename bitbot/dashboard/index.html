@@ -12,10 +12,10 @@
   <link rel="icon" type="image/svg+xml" href="./favicon.svg">
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png">
-  <link rel="stylesheet" href="./styles.css?v=desk-ex6">
-  <link rel="stylesheet" href="./premium.css?v=desk-ex6">
+  <link rel="stylesheet" href="./styles.css?v=desk-ex7">
+  <link rel="stylesheet" href="./premium.css?v=desk-ex7">
   <script src="./lightweight-charts.js" defer></script>
-  <script src="./app.js?v=desk-ex6" defer></script>
+  <script src="./app.js?v=desk-ex7" defer></script>
 </head>
 <body class="desk2 exchange-shell">
   <a class="skip" href="#main">Skip to desk</a>
@@ -101,7 +101,7 @@
           <div class="card-top">
             <div>
               <h2>Bitbot AI</h2>
-              <p class="quiet-label" id="bot-note">Paper scalper · live UTA signals only</p>
+              <p class="quiet-label" id="bot-note">USDT-M futures · 1m/5m scan · below 10× is safe</p>
             </div>
             <span class="status-badge" id="bot-status">—</span>
           </div>
@@ -113,12 +113,14 @@
             <div><span>Win rate</span><strong id="bot-win">—</strong></div>
           </div>
           <div class="bot-open" id="bot-open">No paper position yet.</div>
+          <div class="bot-scan" id="bot-scan" hidden></div>
           <div class="bot-signals" id="bot-signals" hidden></div>
           <ol class="bot-tape" id="bot-tape" aria-label="Recent paper fills"></ol>
           <div class="bot-actions">
             <div class="profile-toggle" role="group" aria-label="Risk profile">
-              <button type="button" class="size-mode-btn active" data-bot-profile="aggressive">Aggressive 50×</button>
-              <button type="button" class="size-mode-btn" data-bot-profile="balanced">Balanced 25×</button>
+              <button type="button" class="size-mode-btn" data-bot-profile="safe">Safe &lt;10×</button>
+              <button type="button" class="size-mode-btn" data-bot-profile="risk">Risk 10–75×</button>
+              <button type="button" class="size-mode-btn active" data-bot-profile="aggressive">Aggressive 150×</button>
             </div>
             <div class="bot-buttons">
               <button type="button" class="primary-button" id="bot-start">Start scalper</button>
@@ -126,7 +128,7 @@
               <button type="button" class="secondary-button" id="bot-flatten">Flatten paper</button>
             </div>
           </div>
-          <p class="ticket-lock" id="bot-lock">Paper fills only. LIVE Bitget place/close stays locked.</p>
+          <p class="ticket-lock" id="bot-lock">Futures paper only. Below 10× is safe. LIVE Bitget place/close stays locked.</p>
         </section>
 
         <section class="card paper-lab" id="paper-lab" aria-label="Paper lab">
@@ -346,11 +348,12 @@
             <div class="slider-block">
               <div class="slider-head">
                 <span>Leverage</span>
-                <strong><span id="t-lev-readout">5</span>×</strong>
+                <strong><span id="t-lev-readout">25</span>×</strong>
               </div>
-              <input id="t-leverage-range" class="ex-range lev" type="range" min="1" max="125" step="1" value="5" aria-label="Leverage slider">
-              <div class="slider-ticks" aria-hidden="true"><span>1×</span><span>25×</span><span>50×</span><span>100×</span><span>125×</span></div>
-              <input id="t-leverage" type="hidden" value="5">
+              <input id="t-leverage-range" class="ex-range lev" type="range" min="1" max="150" step="1" value="25" aria-label="Leverage slider">
+              <div class="slider-ticks" aria-hidden="true"><span>1×</span><span>10×</span><span>50×</span><span>100×</span><span>150×</span></div>
+              <p class="quiet-label" id="t-lev-hint">Risk · 10× and above</p>
+              <input id="t-leverage" type="hidden" value="25">
             </div>
 
             <div class="size-mode exchange-mode" role="group" aria-label="Size mode">

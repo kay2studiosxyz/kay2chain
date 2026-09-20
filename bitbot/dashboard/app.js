@@ -1190,6 +1190,11 @@
       levRange.addEventListener('input', () => {
         levHidden.value = levRange.value;
         if ($('#t-lev-readout')) $('#t-lev-readout').textContent = levRange.value;
+        const hint = $('#t-lev-hint');
+        if (hint) {
+          const n = Number(levRange.value) || 0;
+          hint.textContent = n < 10 ? 'Safe · below 10×' : (n >= 100 ? 'High risk · up to 150×' : 'Risk · 10× and above');
+        }
         setSizeFromPercent($('#t-pct-range').value);
       });
     }
@@ -1368,7 +1373,7 @@
       const pos = bot.open;
       if (!pos) {
         openBox.className = 'bot-open empty';
-        openBox.textContent = running ? 'Hunting 1m impulse…' : 'No paper position.';
+        openBox.textContent = running ? 'Scanning USDT-M 1m/5m for an entry…' : 'No paper position.';
       } else {
         openBox.className = `bot-open ${pos.side || ''}`;
         openBox.innerHTML = `
@@ -1376,6 +1381,7 @@
             <strong>${pos.symbol}</strong>
             <span class="side-pill ${pos.side}">${pos.side || '—'}</span>
             <span class="lev">${pos.leverage != null ? fmt(pos.leverage, 0) + '×' : ''}</span>
+            <span class="quiet-label">${Number(pos.leverage) < 10 ? 'safe' : 'risk'}</span>
           </div>
           <div class="bot-open-grid">
             <div><span>Entry</span><strong>${fmtPx(pos.entry)}</strong></div>
@@ -1385,6 +1391,18 @@
           </div>
           <p>${pos.be_armed ? 'Stop at break-even · ' : ''}${pos.reason || ''}</p>`;
       }
+    }
+
+    const scanRoot = $('#bot-scan');
+    if (scanRoot) {
+      const rows = bot.scan || [];
+      scanRoot.hidden = !rows.length;
+      scanRoot.innerHTML = rows.map((s) => `
+        <div class="bot-scan-row ${s.verdict || 'SKIP'}">
+          <strong>${s.symbol}</strong>
+          <span>${s.verdict || 'SKIP'}${s.leverage ? ` · ${s.leverage}×` : ''}</span>
+          <p>${s.reason || ''}</p>
+        </div>`).join('');
     }
 
     const sigRoot = $('#bot-signals');
