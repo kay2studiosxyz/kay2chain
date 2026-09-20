@@ -790,3 +790,128 @@ body.exchange-shell .workspace-label { letter-spacing: .14em; }
   .top-equity > div { padding: .4rem .7rem; }
   .ex-kpis .live-desk-metrics.large { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+
+/* Heading mascot sits in the page-title gutter, not a slap-on banner */
+body.exchange-shell .exchange-heading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(160px, 240px);
+  align-items: end;
+  gap: 0 1.25rem;
+  position: relative;
+  min-height: 148px;
+  overflow: hidden;
+  margin-bottom: 1.1rem;
+}
+body.exchange-shell .heading-copy { position: relative; z-index: 2; max-width: 42rem; }
+body.exchange-shell .heading-copy .desk-clock {
+  text-align: left;
+  margin-top: .75rem;
+  min-width: 0;
+}
+body.exchange-shell .heading-mascot {
+  position: relative;
+  height: 148px;
+  z-index: 1;
+}
+body.exchange-shell .mascot-stage {
+  position: absolute;
+  right: -12px;
+  bottom: -18px;
+  width: 250px;
+  height: 190px;
+}
+body.exchange-shell .mascot-hero {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 78% 12%;
+  pointer-events: none;
+  filter: drop-shadow(0 16px 28px rgba(0,0,0,.45));
+  -webkit-mask-image: linear-gradient(180deg, #000 62%, transparent 100%),
+    linear-gradient(90deg, transparent 0%, #000 18%, #000 100%);
+  -webkit-mask-composite: source-in;
+  mask-image: linear-gradient(180deg, #000 62%, transparent 100%),
+    linear-gradient(90deg, transparent 0%, #000 18%, #000 100%);
+  mask-composite: intersect;
+}
+body.exchange-shell .mascot-haze { display: none; }
+body.exchange-shell .mascot-art-btn {
+  pointer-events: auto;
+  position: absolute;
+  right: 8px;
+  bottom: 22px;
+  z-index: 3;
+  min-height: 32px;
+  padding: 6px 10px;
+  font-size: 10px;
+}
+
+.pnl-hero {
+  display: grid;
+  grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
+  gap: 1rem;
+  align-items: stretch;
+  padding: 1rem 1.1rem .85rem;
+  margin-bottom: 1rem;
+  overflow: hidden;
+  background:
+    radial-gradient(420px 160px at 100% 0%, rgba(109,255,176,.09), transparent 60%),
+    linear-gradient(125deg, #141a20, #11161b);
+}
+.pnl-hero-copy .tiny-label { display: block; margin-bottom: .35rem; }
+.pnl-hero-copy strong {
+  display: block;
+  font: 550 2rem var(--mono, ui-monospace, monospace);
+  letter-spacing: -.04em;
+  color: #e8fff1;
+}
+.pnl-chip {
+  display: inline-block;
+  margin: .45rem 0 .35rem;
+  padding: .2rem .55rem;
+  border-radius: 999px;
+  font: 650 .85rem var(--mono, ui-monospace, monospace);
+  background: rgba(255,255,255,.05);
+}
+.pnl-chip.up { color: #8dffb8; background: rgba(109,255,176,.1); }
+.pnl-chip.down { color: #ff9b9b; background: rgba(255,107,122,.12); }
+.pnl-hero-copy p { margin: 0; font-size: .78rem; color: #8aa094; }
+.pnl-chart { min-height: 168px; width: 100%; }
+
+.tick-up { animation: tick-up .55s ease; }
+.tick-down { animation: tick-down .55s ease; }
+@keyframes tick-up { 0% { color: #8dffb8; transform: translateY(4px); } 100% { transform: none; } }
+@keyframes tick-down { 0% { color: #ff9b9b; transform: translateY(-4px); } 100% { transform: none; } }
+
+.view:not([hidden]) { animation: view-in .28s ease; }
+@keyframes view-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+.connection.good i { animation: live-pulse 1.8s ease-in-out infinite; }
+@keyframes live-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(109,255,176,.45); }
+  50% { box-shadow: 0 0 0 6px rgba(109,255,176,0); }
+}
+
+.pos-row { animation: row-in .35s ease; }
+@keyframes row-in { from { opacity: 0; transform: translateX(-6px); } to { opacity: 1; transform: none; } }
+
+@media (prefers-reduced-motion: no-preference) {
+  body.exchange-shell .mascot-hero { animation: mascot-idle 7s ease-in-out infinite; }
+  @keyframes mascot-idle {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-6px); }
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .view:not([hidden]), .pos-row, .tick-up, .tick-down, .mascot-hero, .connection.good i { animation: none !important; }
+}
+@media (max-width: 860px) {
+  body.exchange-shell .exchange-heading {
+    grid-template-columns: 1fr 140px;
+    min-height: 120px;
+  }
+  body.exchange-shell .mascot-stage { width: 170px; height: 140px; right: -20px; }
+  .pnl-hero { grid-template-columns: 1fr; }
+  .pnl-chart { min-height: 140px; }
+}

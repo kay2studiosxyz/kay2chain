@@ -64,33 +64,38 @@
     </header>
 
     <main id="main" tabindex="-1">
-      <section class="page-heading desk-heading exchange-heading">
-        <div>
+      <section class="page-heading desk-heading exchange-heading" aria-label="Desk header">
+        <div class="heading-copy">
           <div class="eyebrow"><span class="small-square"></span> BITBOT · USDT-M PERPETUALS</div>
           <div class="mode-badge" id="mode-badge" title="Default dry-run — LIVE needs Kane unlock"><i></i><span>PAPER / WATCH</span></div>
           <h1 id="page-title">Portfolio</h1>
           <p id="page-description">Balances, margin, and open UTA positions.</p>
+          <div class="desk-clock inline-clock">
+            <span class="tiny-label">UK TIME</span>
+            <strong id="uk-clock">—</strong>
+            <span class="quiet-label" id="desk-updated">—</span>
+          </div>
         </div>
-        <div class="desk-clock">
-          <span class="tiny-label">UK TIME</span>
-          <strong id="uk-clock">—</strong>
-          <span class="quiet-label" id="desk-updated">—</span>
+        <div class="heading-mascot" aria-label="Bitbot brand">
+          <div class="mascot-stage">
+            <img class="mascot-hero" src="./bitbot-art.jpg" alt="Bitbot" fetchpriority="high" width="640" height="640">
+            <div class="mascot-haze" aria-hidden="true"></div>
+            <button type="button" id="view-art" class="art-button mascot-art-btn" aria-label="View full BitBot artwork">Art ↗</button>
+          </div>
         </div>
       </section>
       <div class="notice" id="notice" role="status" hidden></div>
 
       <!-- PORTFOLIO -->
       <div class="view" data-panel="portfolio">
-        <section class="ex-mascot card" aria-label="Bitbot brand">
-          <div class="profile-art mascot-banner">
-            <img class="banner-mascot" src="./bitbot-art.jpg" alt="" fetchpriority="high" width="1200" height="900">
-            <div class="banner-copy">
-              <span class="art-coordinate">BITBOT / BY KAY2</span>
-              <span class="art-word">SCAN.<br>ANALYSE.<br>EXECUTE.</span>
-              <span class="art-caption">Brand artwork · illustrative signals</span>
-            </div>
-            <button type="button" id="view-art" class="art-button" aria-label="View full BitBot artwork">Explore the artwork ↗</button>
+        <section class="card pnl-hero" aria-label="Live portfolio">
+          <div class="pnl-hero-copy">
+            <span class="tiny-label">LIVE PORTFOLIO</span>
+            <strong id="pnl-equity">—</strong>
+            <span id="pnl-upnl" class="pnl-chip">—</span>
+            <p>Unrealised profit updates with the UTA book.</p>
           </div>
+          <div id="pnl-chart" class="pnl-chart" role="img" aria-label="Live equity chart"></div>
         </section>
 
         <section class="account-strip card ex-kpis" aria-label="Account">

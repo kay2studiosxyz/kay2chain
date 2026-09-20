@@ -22,6 +22,9 @@
     fills: [],
     lastMark: null,
     previewTimer: null,
+    equityChart: null,
+    equitySeries: null,
+    equityTicks: [],
   };
 
   const $ = (sel, root = document) => root.querySelector(sel);
@@ -161,6 +164,9 @@
       ensureChart();
       loadCandles(true);
     }
+    if (name === 'portfolio') {
+      ensureEquityChart();
+    }
     if (name === 'trade') {
       paintTradeBalances();
       refreshTradeMark();
@@ -206,6 +212,113 @@
     if ($('#t-max-notional')) $('#t-max-notional').textContent = maxNotional != null ? `$${fmt(maxNotional)}` : '—';
     if ($('#t-max-line')) $('#t-max-line').textContent = maxNotional != null ? `$${fmt(maxNotional)}` : '—';
     updateCostStrip();
+  }
+
+  const EQ_STORE = 'bitbot.equity.ticks';
+  const EQ_MAX = 360;
+
+  function loadEquityTicks() {
+    try {
+      const raw = sessionStorage.getItem(EQ_STORE);
+      const parsed = raw ? JSON.parse(raw) : [];
+      if (Array.isArray(parsed)) state.equityTicks = parsed.filter((p) => p && p.t && p.v != null);
+    } catch {
+      state.equityTicks = [];
+    }
+  }
+
+  function saveEquityTicks() {
+    try {
+      sessionStorage.setItem(EQ_STORE, JSON.stringify(state.equityTicks.slice(-EQ_MAX)));
+    } catch { /* ignore quota */ }
+  }
+
+  function flash(el, dir) {
+    if (!el) return;
+    el.classList.remove('tick-up', 'tick-down');
+    void el.offsetWidth;
+    el.classList.add(dir === 'up' ? 'tick-up' : 'tick-down');
+  }
+
+  function ensureEquityChart() {
+    const el = $('#pnl-chart');
+    if (!el || state.equityChart || typeof LightweightCharts === 'undefined') return;
+    loadEquityTicks();
+    state.equityChart = LightweightCharts.createChart(el, {
+      layout: {
+        background: { color: 'transparent' },
+        textColor: '#8aa094',
+      },
+      grid: {
+        vertLines: { visible: false },
+        horzLines: { color: 'rgba(255,255,255,0.05)' },
+      },
+      rightPriceScale: { borderVisible: false },
+      timeScale: { borderVisible: false, timeVisible: true, secondsVisible: true },
+      crosshair: { vertLine: { visible: false }, horzLine: { visible: false } },
+      handleScroll: false,
+      handleScale: false,
+      width: el.clientWidth || 320,
+      height: 168,
+    });
+    state.equitySeries = state.equityChart.addAreaSeries({
+      lineColor: '#6dffb0',
+      topColor: 'rgba(109, 255, 176, 0.28)',
+      bottomColor: 'rgba(109, 255, 176, 0.02)',
+      lineWidth: 2,
+      priceLineVisible: false,
+    });
+    if (state.equityTicks.length) {
+      state.equitySeries.setData(state.equityTicks.map((p) => ({ time: p.t, value: p.v })));
+      state.equityChart.timeScale().fitContent();
+    }
+    const ro = new ResizeObserver(() => {
+      if (!state.equityChart) return;
+      state.equityChart.applyOptions({ width: el.clientWidth || 320 });
+    });
+    ro.observe(el);
+  }
+
+  function pushEquityTick(acct) {
+    ensureEquityChart();
+    const eqEl = $('#pnl-equity');
+    const upEl = $('#pnl-upnl');
+    if (!acct || acct.equity == null) {
+      if (eqEl) eqEl.textContent = '—';
+      if (upEl) upEl.textContent = '—';
+      return;
+    }
+    const equity = Number(acct.equity);
+    const upnl = acct.unrealised_pnl != null ? Number(acct.unrealised_pnl) : null;
+    if (eqEl) {
+      const prev = eqEl.dataset.raw;
+      eqEl.textContent = `$${fmt(equity)}`;
+      eqEl.dataset.raw = String(equity);
+      if (prev != null && Number(prev) !== equity) flash(eqEl, equity >= Number(prev) ? 'up' : 'down');
+    }
+    if (upEl) {
+      upEl.textContent = money(upnl);
+      upEl.className = `pnl-chip ${pnlClass(upnl)}`;
+    }
+    const now = Math.floor(Date.now() / 1000);
+    const last = state.equityTicks[state.equityTicks.length - 1];
+    if (last && last.t === now) last.v = equity;
+    else if (!last || last.v !== equity || now - last.t >= 1) state.equityTicks.push({ t: now, v: equity });
+    if (state.equityTicks.length > EQ_MAX) state.equityTicks = state.equityTicks.slice(-EQ_MAX);
+    saveEquityTicks();
+    if (state.equitySeries && state.equityTicks.length) {
+      const data = state.equityTicks.map((p) => ({ time: p.t, value: p.v }));
+      state.equitySeries.setData(data);
+      const start = state.equityTicks[0].v;
+      const end = state.equityTicks[state.equityTicks.length - 1].v;
+      const up = end >= start;
+      state.equitySeries.applyOptions({
+        lineColor: up ? '#6dffb0' : '#ff6b7a',
+        topColor: up ? 'rgba(109, 255, 176, 0.28)' : 'rgba(255, 107, 122, 0.28)',
+        bottomColor: up ? 'rgba(109, 255, 176, 0.02)' : 'rgba(255, 107, 122, 0.02)',
+      });
+      state.equityChart.timeScale().fitContent();
+    }
   }
 
   function setText(id, value, className) {
@@ -302,6 +415,7 @@
 
     renderAssets(acct);
     renderMargin(acct);
+    pushEquityTick(acct);
     paintTradeBalances();
   }
 
@@ -1095,6 +1209,7 @@
 
   function boot() {
     paintIcons();
+    loadEquityTicks();
     wireArt();
     wireNav();
     wireTrade();
