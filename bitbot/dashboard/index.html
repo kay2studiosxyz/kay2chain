@@ -21,7 +21,7 @@
   <a class="skip" href="#main">Skip to desk</a>
   <aside class="sidebar">
     <a class="brand" href="#portfolio" aria-label="Bitbot portfolio">
-      <span class="brand-mark" aria-hidden="true">b<span>·</span></span>
+      <span class="brand-mark mascot-portrait" aria-hidden="true"><img src="./bitbot-art.jpg" alt=""></span>
       <span>bitbot<span class="brand-sub">EXCHANGE</span></span>
     </a>
     <div class="workspace-label">USDT-M · BITGET UTA</div>
@@ -37,7 +37,7 @@
       <span class="paper-tag watch-tag" id="mode-chip"><i></i> PAPER / WATCH</span>
     </div>
     <div class="sidebar-bottom">
-      <span class="avatar">K</span>
+      <span class="avatar mascot-portrait" aria-hidden="true"><img src="./bitbot-art.jpg" alt=""></span>
       <div><strong>Kane</strong><small id="sidebar-live">LIVE locked</small></div>
       <span data-icon="lock"></span>
     </div>
@@ -59,7 +59,7 @@
       <div class="topbar-right">
         <span class="connection" id="connection"><i></i><span>Connecting</span></span>
         <button class="icon-button" id="refresh" aria-label="Refresh desk" title="Refresh"><span data-icon="refresh"></span></button>
-        <span class="top-avatar">K</span>
+        <span class="top-avatar mascot-portrait" aria-hidden="true"><img src="./bitbot-art.jpg" alt=""></span>
       </div>
     </header>
 
@@ -81,6 +81,18 @@
 
       <!-- PORTFOLIO -->
       <div class="view" data-panel="portfolio">
+        <section class="ex-mascot card" aria-label="Bitbot brand">
+          <div class="profile-art mascot-banner">
+            <img class="banner-mascot" src="./bitbot-art.jpg" alt="" fetchpriority="high" width="1200" height="900">
+            <div class="banner-copy">
+              <span class="art-coordinate">BITBOT / BY KAY2</span>
+              <span class="art-word">SCAN.<br>ANALYSE.<br>EXECUTE.</span>
+              <span class="art-caption">Brand artwork · illustrative signals</span>
+            </div>
+            <button type="button" id="view-art" class="art-button" aria-label="View full BitBot artwork">Explore the artwork ↗</button>
+          </div>
+        </section>
+
         <section class="account-strip card ex-kpis" aria-label="Account">
           <div class="live-desk-metrics large" id="account-metrics">
             <div><span>Equity</span><strong id="acct-equity">—</strong></div>
@@ -347,5 +359,16 @@
       </section>
     </main>
   </div>
+
+  <dialog id="art-dialog" class="art-dialog">
+    <div class="dialog-top">
+      <h2>Meet BitBot</h2>
+      <button type="button" id="art-dialog-close" aria-label="Close">×</button>
+    </div>
+    <div id="art-dialog-body">
+      <img class="full-brand-art" src="./bitbot-art.jpg" alt="BitBot robot mascot with cyan eyes, Bitget cap and hoodie, trading illustrations and KAY2 signature.">
+      <p class="art-disclosure">Brand artwork supplied by KAY2. Prices, signals and verdicts pictured in the illustration are decorative, not current trading data.</p>
+    </div>
+  </dialog>
 </body>
 </html>

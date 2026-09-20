@@ -1052,6 +1052,21 @@
     refreshTradeMark();
   }
 
+  function wireArt() {
+    const dlg = $('#art-dialog');
+    const openBtn = $('#view-art');
+    const closeBtn = $('#art-dialog-close');
+    if (!dlg || !openBtn) return;
+    openBtn.addEventListener('click', () => {
+      if (typeof dlg.showModal === 'function') dlg.showModal();
+      else dlg.setAttribute('open', '');
+    });
+    if (closeBtn) closeBtn.addEventListener('click', () => dlg.close());
+    dlg.addEventListener('click', (ev) => {
+      if (ev.target === dlg) dlg.close();
+    });
+  }
+
   function wireNav() {
     $$('.nav-link').forEach((a) => {
       a.addEventListener('click', (ev) => {
@@ -1080,6 +1095,7 @@
 
   function boot() {
     paintIcons();
+    wireArt();
     wireNav();
     wireTrade();
     buildSymbolSwitch();

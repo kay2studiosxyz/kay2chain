@@ -81,8 +81,20 @@ dialog{border:1px solid #425045;border-radius:15px;background:#131b1d;color:var(
 
 /* —— Desk 2: trader desk (positions / charts / trade) —— */
 body.desk2 .session-picker,
-body.desk2 .mascot-banner,
 body.desk2 .trader-profile { display: none !important; }
+/* Keep brand mascot visible on the exchange shell */
+body.desk2:not(.exchange-shell) .mascot-banner { display: none !important; }
+body.exchange-shell .mascot-banner { display: block !important; }
+body.exchange-shell .ex-mascot {
+  padding: 0;
+  overflow: hidden;
+  margin-bottom: 1rem;
+  border-radius: 14px;
+}
+body.exchange-shell .ex-mascot .mascot-banner {
+  margin: 0;
+  border-radius: 0;
+}
 
 .desk-heading { align-items: flex-end; }
 .desk-clock { text-align: right; min-width: 9rem; }
