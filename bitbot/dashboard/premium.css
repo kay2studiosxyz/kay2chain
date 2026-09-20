@@ -792,59 +792,50 @@ body.exchange-shell .workspace-label { letter-spacing: .14em; }
 }
 
 
-/* Heading mascot sits in the page-title gutter, not a slap-on banner */
-body.exchange-shell .exchange-heading {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(160px, 240px);
-  align-items: end;
-  gap: 0 1.25rem;
-  position: relative;
-  min-height: 148px;
-  overflow: hidden;
+/* Mascot lives in the heading gutter — portrait, not a banner */
+body.exchange-shell .page-heading.exchange-heading {
+  display: grid !important;
+  grid-template-columns: 118px minmax(0, 1fr);
+  align-items: center !important;
+  justify-content: start;
+  flex-direction: row !important;
+  gap: 16px !important;
+  min-height: 0;
+  overflow: visible;
   margin-bottom: 1.1rem;
 }
-body.exchange-shell .heading-copy { position: relative; z-index: 2; max-width: 42rem; }
+body.exchange-shell .heading-copy {
+  position: relative;
+  z-index: 2;
+  min-width: 0;
+}
 body.exchange-shell .heading-copy .desk-clock {
   text-align: left;
-  margin-top: .75rem;
+  margin-top: .65rem;
   min-width: 0;
 }
 body.exchange-shell .heading-mascot {
-  position: relative;
-  height: 148px;
-  z-index: 1;
+  width: 118px;
+  height: 118px;
+  padding: 0;
+  border: 1px solid rgba(53, 229, 229, 0.28);
+  border-radius: 28px;
+  overflow: hidden;
+  background: #041015;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+  flex-shrink: 0;
 }
-body.exchange-shell .mascot-stage {
-  position: absolute;
-  right: -12px;
-  bottom: -18px;
-  width: 250px;
-  height: 190px;
+body.exchange-shell .heading-mascot:hover {
+  border-color: rgba(109, 255, 176, 0.55);
 }
 body.exchange-shell .mascot-hero {
+  display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
-  object-position: 78% 12%;
+  object-position: 52% 10%;
   pointer-events: none;
-  filter: drop-shadow(0 16px 28px rgba(0,0,0,.45));
-  -webkit-mask-image: linear-gradient(180deg, #000 62%, transparent 100%),
-    linear-gradient(90deg, transparent 0%, #000 18%, #000 100%);
-  -webkit-mask-composite: source-in;
-  mask-image: linear-gradient(180deg, #000 62%, transparent 100%),
-    linear-gradient(90deg, transparent 0%, #000 18%, #000 100%);
-  mask-composite: intersect;
-}
-body.exchange-shell .mascot-haze { display: none; }
-body.exchange-shell .mascot-art-btn {
-  pointer-events: auto;
-  position: absolute;
-  right: 8px;
-  bottom: 22px;
-  z-index: 3;
-  min-height: 32px;
-  padding: 6px 10px;
-  font-size: 10px;
 }
 
 .pnl-hero {
@@ -897,21 +888,29 @@ body.exchange-shell .mascot-art-btn {
 @keyframes row-in { from { opacity: 0; transform: translateX(-6px); } to { opacity: 1; transform: none; } }
 
 @media (prefers-reduced-motion: no-preference) {
-  body.exchange-shell .mascot-hero { animation: mascot-idle 7s ease-in-out infinite; }
+  body.exchange-shell .heading-mascot { animation: mascot-idle 7s ease-in-out infinite; }
   @keyframes mascot-idle {
     0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-6px); }
+    50% { transform: translateY(-4px); }
   }
 }
 @media (prefers-reduced-motion: reduce) {
   .view:not([hidden]), .pos-row, .tick-up, .tick-down, .mascot-hero, .connection.good i { animation: none !important; }
 }
 @media (max-width: 860px) {
-  body.exchange-shell .exchange-heading {
-    grid-template-columns: 1fr 140px;
-    min-height: 120px;
+  body.exchange-shell .page-heading.exchange-heading {
+    grid-template-columns: 96px minmax(0, 1fr);
+    gap: 12px !important;
   }
-  body.exchange-shell .mascot-stage { width: 170px; height: 140px; right: -20px; }
+  body.exchange-shell .heading-mascot {
+    width: 96px;
+    height: 96px;
+    border-radius: 24px;
+  }
+  body.exchange-shell .mascot-hero {
+    width: 250%;
+    margin: -16% 0 0 -96%;
+  }
   .pnl-hero { grid-template-columns: 1fr; }
   .pnl-chart { min-height: 140px; }
 }
