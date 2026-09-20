@@ -21,7 +21,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-DESK_VERSION = "desk-2.1.2"
+DESK_VERSION = "desk-2.2.0"
 DESK_MODE = "PAPER_WATCH"
 CACHE_TTL_SECONDS = 3.0
 TICKER_TTL_SECONDS = 1.5
@@ -516,6 +516,13 @@ def desk_summary(paper_session: dict[str, Any] | None = None) -> dict[str, Any]:
         _record_pnl(account)
 
     lock = live_unlock_status()
+    bot = None
+    try:
+        from . import desk_bot
+
+        bot = desk_bot.status()
+    except Exception:
+        bot = None
     return {
         "ok": bool(snap.get("ok")),
         "mode": DESK_MODE,
@@ -528,6 +535,7 @@ def desk_summary(paper_session: dict[str, Any] | None = None) -> dict[str, Any]:
         "positions": positions,
         "account": account,
         "paper_session": paper,
+        "bot": bot,
         "live_trading": bool(lock.get("unlocked")),
         "live_lock": lock.get("message"),
         "alerts": alerts or None,

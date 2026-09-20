@@ -12,10 +12,10 @@
   <link rel="icon" type="image/svg+xml" href="./favicon.svg">
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png">
-  <link rel="stylesheet" href="./styles.css?v=desk-ex5">
-  <link rel="stylesheet" href="./premium.css?v=desk-ex5">
+  <link rel="stylesheet" href="./styles.css?v=desk-ex6">
+  <link rel="stylesheet" href="./premium.css?v=desk-ex6">
   <script src="./lightweight-charts.js" defer></script>
-  <script src="./app.js?v=desk-ex5" defer></script>
+  <script src="./app.js?v=desk-ex6" defer></script>
 </head>
 <body class="desk2 exchange-shell">
   <a class="skip" href="#main">Skip to desk</a>
@@ -72,7 +72,7 @@
           <div class="eyebrow"><span class="small-square"></span> BITBOT · USDT-M PERPETUALS</div>
           <div class="mode-badge" id="mode-badge" title="Default dry-run — LIVE needs Kane unlock"><i></i><span>PAPER / WATCH</span></div>
           <h1 id="page-title">Portfolio</h1>
-          <p id="page-description">Balances, margin, and open UTA positions.</p>
+          <p id="page-description">Balances, margin, AI scalper, and open UTA positions.</p>
           <div class="desk-clock inline-clock">
             <span class="tiny-label">UK TIME</span>
             <strong id="uk-clock">—</strong>
@@ -95,6 +95,38 @@
             <p>Unrealised profit on the UTA book — updates live.</p>
           </div>
           <div id="pnl-chart" class="pnl-chart" role="img" aria-label="Live profit chart"></div>
+        </section>
+
+        <section class="card ai-bot" id="ai-bot" aria-label="Bitbot AI scalper">
+          <div class="card-top">
+            <div>
+              <h2>Bitbot AI</h2>
+              <p class="quiet-label" id="bot-note">Paper scalper · live UTA signals only</p>
+            </div>
+            <span class="status-badge" id="bot-status">—</span>
+          </div>
+          <p class="bot-signal" id="bot-live-banner" hidden></p>
+          <div class="paper-metrics bot-metrics">
+            <div><span>Paper equity</span><strong id="bot-equity">—</strong></div>
+            <div><span>Net</span><strong id="bot-net">—</strong></div>
+            <div><span>Open uPnL</span><strong id="bot-open-upnl">—</strong></div>
+            <div><span>Win rate</span><strong id="bot-win">—</strong></div>
+          </div>
+          <div class="bot-open" id="bot-open">No paper position yet.</div>
+          <div class="bot-signals" id="bot-signals" hidden></div>
+          <ol class="bot-tape" id="bot-tape" aria-label="Recent paper fills"></ol>
+          <div class="bot-actions">
+            <div class="profile-toggle" role="group" aria-label="Risk profile">
+              <button type="button" class="size-mode-btn active" data-bot-profile="aggressive">Aggressive 50×</button>
+              <button type="button" class="size-mode-btn" data-bot-profile="balanced">Balanced 25×</button>
+            </div>
+            <div class="bot-buttons">
+              <button type="button" class="primary-button" id="bot-start">Start scalper</button>
+              <button type="button" class="secondary-button" id="bot-stop">Pause</button>
+              <button type="button" class="secondary-button" id="bot-flatten">Flatten paper</button>
+            </div>
+          </div>
+          <p class="ticket-lock" id="bot-lock">Paper fills only. LIVE Bitget place/close stays locked.</p>
         </section>
 
         <section class="card paper-lab" id="paper-lab" aria-label="Paper lab">

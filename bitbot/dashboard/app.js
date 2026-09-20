@@ -152,7 +152,7 @@
       p.hidden = !on;
     });
     const titles = {
-      portfolio: ['Portfolio', 'Balances, margin, and open UTA positions.'],
+      portfolio: ['Portfolio', 'Balances, margin, AI scalper, and open UTA positions.'],
       charts: ['Markets', 'Bitget candles · near-realtime mark.'],
       trade: ['Trade', 'Exchange ticket · available USDT, leverage & size sliders.'],
     };
@@ -669,6 +669,9 @@
       showNotice(data.alerts[0], data.stale ? 'warn' : 'warn');
     } else if (data.error) {
       showNotice(data.error, 'warn');
+    }
+    if (data.bot) {
+      renderBot(data.bot);
     }
     if (data.ts) {
       const d = new Date(data.ts);
@@ -1322,6 +1325,119 @@
     }
   }
 
+  function renderBot(bot) {
+    if (!bot || !$('#ai-bot')) return;
+    const running = Boolean(bot.running) && !bot.halt;
+    const statusEl = $('#bot-status');
+    if (statusEl) {
+      statusEl.textContent = bot.halt ? 'HALTED' : (running ? 'SCALPING' : 'PAUSED');
+      statusEl.className = `status-badge ${bot.halt ? 'warn' : (running ? 'live' : 'neutral')}`;
+    }
+    if ($('#bot-note')) $('#bot-note').textContent = bot.note || 'Paper scalper · live UTA signals only';
+    const metrics = bot.metrics || {};
+    const eqEl = $('#bot-equity');
+    if (eqEl) eqEl.textContent = metrics.paper_equity != null ? `$${fmt(metrics.paper_equity)}` : '—';
+    const netEl = $('#bot-net');
+    if (netEl) {
+      netEl.textContent = money(metrics.net_usdt);
+      netEl.className = pnlClass(metrics.net_usdt);
+    }
+    const openEl = $('#bot-open-upnl');
+    if (openEl) {
+      openEl.textContent = money(metrics.open_upnl);
+      openEl.className = pnlClass(metrics.open_upnl);
+    }
+    setText('bot-win', metrics.win_rate != null ? fmtPct(Number(metrics.win_rate) * 100) : '—');
+
+    $$('[data-bot-profile]').forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.botProfile === bot.profile);
+    });
+
+    const urgent = (bot.live_signals || []).find((s) => s.signal === 'BANK_NOW' || s.signal === 'URGENT_TP' || s.signal === 'PROTECT');
+    const banner = $('#bot-live-banner');
+    if (banner) {
+      banner.hidden = !urgent;
+      if (urgent) {
+        banner.className = `bot-signal ${urgent.signal === 'PROTECT' ? 'warn' : 'bank'}`;
+        banner.textContent = `LIVE ${urgent.symbol} ${urgent.signal}: ${urgent.detail}`;
+      }
+    }
+
+    const openBox = $('#bot-open');
+    if (openBox) {
+      const pos = bot.open;
+      if (!pos) {
+        openBox.className = 'bot-open empty';
+        openBox.textContent = running ? 'Hunting 1m impulse…' : 'No paper position.';
+      } else {
+        openBox.className = `bot-open ${pos.side || ''}`;
+        openBox.innerHTML = `
+          <div class="bot-open-head">
+            <strong>${pos.symbol}</strong>
+            <span class="side-pill ${pos.side}">${pos.side || '—'}</span>
+            <span class="lev">${pos.leverage != null ? fmt(pos.leverage, 0) + '×' : ''}</span>
+          </div>
+          <div class="bot-open-grid">
+            <div><span>Entry</span><strong>${fmtPx(pos.entry)}</strong></div>
+            <div><span>Mark</span><strong>${fmtPx(pos.mark)}</strong></div>
+            <div><span>Net</span><strong class="${pnlClass(pos.net)}">${money(pos.net)}</strong></div>
+            <div><span>Hold</span><strong>${pos.held_seconds != null ? fmt(pos.held_seconds, 0) + 's' : '—'}</strong></div>
+          </div>
+          <p>${pos.be_armed ? 'Stop at break-even · ' : ''}${pos.reason || ''}</p>`;
+      }
+    }
+
+    const sigRoot = $('#bot-signals');
+    if (sigRoot) {
+      const rows = bot.live_signals || [];
+      sigRoot.hidden = !rows.length;
+      sigRoot.innerHTML = rows.map((s) => `
+        <div class="bot-sig ${s.signal || ''}">
+          <strong>${s.symbol} · ${s.signal}</strong>
+          <span class="${pnlClass(s.upnl)}">${money(s.upnl)}</span>
+          <p>${s.detail || ''}</p>
+        </div>`).join('');
+    }
+
+    const tape = $('#bot-tape');
+    if (tape) {
+      const fills = (bot.closed || []).slice().reverse().slice(0, 8);
+      tape.innerHTML = fills.length
+        ? fills.map((f) => `<li><span>${f.symbol} ${f.side}</span><strong class="${pnlClass(f.net_usdt)}">${money(f.net_usdt)}</strong><em>${f.reason || ''}</em></li>`).join('')
+        : '<li class="empty">No paper fills yet.</li>';
+    }
+  }
+
+  async function botCommand(action, profile) {
+    const body = { action };
+    if (profile) body.profile = profile;
+    const { data } = await api('/api/bot', {
+      method: 'POST',
+      body: JSON.stringify(body),
+      timeoutMs: 8000,
+    });
+    if (data && data.ok) renderBot(data);
+    else showNotice((data && data.error) || 'Bot command failed', 'warn');
+  }
+
+  async function loadBot() {
+    try {
+      const { data } = await api('/api/bot', { timeoutMs: 8000 });
+      if (data && data.ok) renderBot(data);
+    } catch {
+      /* keep last */
+    }
+  }
+
+  function wireBot() {
+    if ($('#bot-start')) $('#bot-start').addEventListener('click', () => botCommand('start'));
+    if ($('#bot-stop')) $('#bot-stop').addEventListener('click', () => botCommand('stop'));
+    if ($('#bot-flatten')) $('#bot-flatten').addEventListener('click', () => botCommand('flatten'));
+    $$('[data-bot-profile]').forEach((btn) => {
+      btn.addEventListener('click', () => botCommand('profile', btn.dataset.botProfile));
+    });
+  }
+
   function exportPaperTrades() {
     if (!paperTrades.length) {
       showNotice('No closed paper trades to export.', 'warn');
@@ -1352,6 +1468,9 @@
     setView(hashView());
     ukClock();
     setInterval(ukClock, 1000);
+    wireBot();
+    loadBot();
+    setInterval(loadBot, 4000);
     loadPaperLab();
     setInterval(loadPaperLab, 30000);
     if ($('#export-trades')) $('#export-trades').addEventListener('click', exportPaperTrades);

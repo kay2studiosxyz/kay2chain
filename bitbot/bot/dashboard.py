@@ -820,7 +820,7 @@ def make_handler(store):
                 self.end_headers()
                 deadline = time.monotonic() + 60
                 self.wfile.write(b"retry: 1500\n\n")
-                self.wfile.write(b"event: hello\ndata: {\"service\":\"bitbot-desk\",\"version\":\"desk-2.1.2\"}\n\n")
+                self.wfile.write(b"event: hello\ndata: {\"service\":\"bitbot-desk\",\"version\":\"desk-2.2.0\"}\n\n")
                 self.wfile.flush()
                 while time.monotonic() < deadline:
                     self.wfile.write(b"event: desk\ndata: " + payload + b"\n\n")
@@ -845,7 +845,7 @@ def make_handler(store):
                 parsed = urlsplit(self.path)
                 if parsed.scheme or parsed.netloc:
                     raise DashboardError(400, "Invalid request")
-                if parsed.path in ("/api/health", "/api/desk", "/api/account", "/api/positions"):
+                if parsed.path in ("/api/health", "/api/desk", "/api/account", "/api/positions", "/api/bot"):
                     if parsed.query:
                         raise DashboardError(400, "Invalid query")
                     from bot import live_desk
@@ -855,6 +855,9 @@ def make_handler(store):
                         self._json(200, live_desk.account_payload())
                     elif parsed.path == "/api/positions":
                         self._json(200, live_desk.positions_payload())
+                    elif parsed.path == "/api/bot":
+                        from bot import desk_bot
+                        self._json(200, desk_bot.status())
                     else:
                         paper = None
                         try:
@@ -952,11 +955,17 @@ def make_handler(store):
                 parsed = urlsplit(self.path)
                 if parsed.scheme or parsed.netloc or parsed.query:
                     raise DashboardError(400, "Invalid request")
-                if parsed.path not in ("/api/trade/preview", "/api/trade/place"):
+                if parsed.path not in ("/api/trade/preview", "/api/trade/place", "/api/bot"):
                     raise DashboardError(405, "Method not allowed")
                 from bot import live_desk
                 body = self._read_json_body()
-                if parsed.path == "/api/trade/preview":
+                if parsed.path == "/api/bot":
+                    from bot import desk_bot
+                    try:
+                        self._json(200, desk_bot.command(body))
+                    except ValueError as exc:
+                        raise DashboardError(400, str(exc)) from exc
+                elif parsed.path == "/api/trade/preview":
                     try:
                         self._json(200, live_desk.trade_preview(body))
                     except ValueError as exc:
@@ -975,7 +984,7 @@ def make_handler(store):
 
         def _reject(self):
             self.close_connection = True
-            self._json(405, {"error": "Method not allowed; use GET or POST /api/trade/*"})
+            self._json(405, {"error": "Method not allowed; use GET or POST /api/trade/* or /api/bot"})
 
         do_PUT = do_PATCH = do_DELETE = do_OPTIONS = do_TRACE = do_CONNECT = _reject
 
@@ -990,6 +999,12 @@ def create_server(data_dir, assets_dir, host="127.0.0.1", port=8871):
     allowed = {"127.0.0.1", "0.0.0.0"}
     if host not in allowed:
         raise ValueError("host must be 127.0.0.1 (default) or 0.0.0.0 for Tailscale/LAN bind")
+    try:
+        from bot import desk_bot
+        desk_bot.configure(Path(data_dir) / "desk-bot.json")
+        desk_bot.start_loop()
+    except Exception:
+        pass
     server = ThreadingHTTPServer((host, port), make_handler(DashboardStore(data_dir, assets_dir)))
     server.daemon_threads = True
     return server

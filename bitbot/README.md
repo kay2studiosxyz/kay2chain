@@ -1,4 +1,4 @@
-# Bitbot · real-time portfolio (desk 2.1)
+# Bitbot · real-time portfolio (desk 2.2)
 
 Production app for **https://bitbot.kay2.dev** runs on the ASUS NUC (`kay2nuc-1` / `100.112.164.103`) under PM2:
 
@@ -17,6 +17,7 @@ This folder mirrors the desk files changed for **live UTA portfolio streaming**.
 | `GET /api/desk` | Combined summary |
 | `GET /api/desk/stream` | **SSE** (~1s) — `event: desk` with the same payload as `/api/desk` |
 | `GET /api/fills` | Recent Bitget fills for chart **buy/sell bubbles** |
+| `GET/POST /api/bot` | In-app **paper scalper** + live UTA take-profit signals (never places Bitget orders) |
 
 The desk UI opens `/api/desk/stream` via `EventSource` and falls back to REST polling every 3s if the stream drops. LIVE order placement stays locked unless `BITBOT_LIVE_OK` is explicitly unlocked on the NUC.
 
