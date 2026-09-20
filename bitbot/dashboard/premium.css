@@ -840,7 +840,7 @@ body.exchange-shell .mascot-hero {
 
 .pnl-hero {
   display: grid;
-  grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
+  grid-template-columns: minmax(160px, 220px) minmax(0, 1fr);
   gap: 1rem;
   align-items: stretch;
   padding: 1rem 1.1rem .85rem;
@@ -851,24 +851,27 @@ body.exchange-shell .mascot-hero {
     linear-gradient(125deg, #141a20, #11161b);
 }
 .pnl-hero-copy .tiny-label { display: block; margin-bottom: .35rem; }
-.pnl-hero-copy strong {
+.pnl-hero-copy > strong {
   display: block;
-  font: 550 2rem var(--mono, ui-monospace, monospace);
-  letter-spacing: -.04em;
+  font: 550 2.15rem var(--mono, ui-monospace, monospace);
+  letter-spacing: -.05em;
   color: #e8fff1;
 }
-.pnl-chip {
-  display: inline-block;
-  margin: .45rem 0 .35rem;
-  padding: .2rem .55rem;
-  border-radius: 999px;
-  font: 650 .85rem var(--mono, ui-monospace, monospace);
-  background: rgba(255,255,255,.05);
+.pnl-hero-copy > strong.up { color: #8dffb8; }
+.pnl-hero-copy > strong.down { color: #ff9b9b; }
+.pnl-sub {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .55rem 1rem;
+  margin: .45rem 0 .3rem;
+  font-size: .78rem;
+  color: #8aa094;
 }
-.pnl-chip.up { color: #8dffb8; background: rgba(109,255,176,.1); }
-.pnl-chip.down { color: #ff9b9b; background: rgba(255,107,122,.12); }
+.pnl-sub b { font: 650 .82rem var(--mono, ui-monospace, monospace); color: #e8fff1; }
+.pnl-sub b.up { color: #8dffb8; }
+.pnl-sub b.down { color: #ff9b9b; }
 .pnl-hero-copy p { margin: 0; font-size: .78rem; color: #8aa094; }
-.pnl-chart { min-height: 168px; width: 100%; }
+.pnl-chart { min-height: 200px; width: 100%; }
 
 .tick-up { animation: tick-up .55s ease; }
 .tick-down { animation: tick-down .55s ease; }
@@ -907,10 +910,7 @@ body.exchange-shell .mascot-hero {
     height: 96px;
     border-radius: 24px;
   }
-  body.exchange-shell .mascot-hero {
-    width: 250%;
-    margin: -16% 0 0 -96%;
-  }
+  body.exchange-shell .mascot-hero { object-position: 52% 8%; }
   .pnl-hero { grid-template-columns: 1fr; }
-  .pnl-chart { min-height: 140px; }
+  .pnl-chart { min-height: 200px; }
 }

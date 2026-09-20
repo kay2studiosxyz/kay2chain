@@ -15,6 +15,8 @@ Mode default is **PAPER_WATCH**. LIVE order placement stays locked unless
 ### `GET /api/desk`
 Summary for embeds (includes positions + live lock).
 
+`pnl_history`: recent `{ t, equity, upnl }` samples (unix seconds) for the live P&L chart.
+
 ### `GET /api/desk/stream`
 Server-sent events for real-time UTA portfolio (equity, unrealised PnL, open positions).
 

@@ -12,10 +12,10 @@
   <link rel="icon" type="image/svg+xml" href="./favicon.svg">
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png">
-  <link rel="stylesheet" href="./styles.css?v=desk-ex3">
-  <link rel="stylesheet" href="./premium.css?v=desk-ex3">
+  <link rel="stylesheet" href="./styles.css?v=desk-ex4">
+  <link rel="stylesheet" href="./premium.css?v=desk-ex4">
   <script src="./lightweight-charts.js" defer></script>
-  <script src="./app.js?v=desk-ex3" defer></script>
+  <script src="./app.js?v=desk-ex4" defer></script>
 </head>
 <body class="desk2 exchange-shell">
   <a class="skip" href="#main">Skip to desk</a>
@@ -84,14 +84,17 @@
 
       <!-- PORTFOLIO -->
       <div class="view" data-panel="portfolio">
-        <section class="card pnl-hero" aria-label="Live portfolio">
+        <section class="card pnl-hero" aria-label="Live portfolio profit">
           <div class="pnl-hero-copy">
-            <span class="tiny-label">LIVE PORTFOLIO</span>
-            <strong id="pnl-equity">—</strong>
-            <span id="pnl-upnl" class="pnl-chip">—</span>
-            <p>Unrealised profit updates with the UTA book.</p>
+            <span class="tiny-label">LIVE P&amp;L</span>
+            <strong id="pnl-upnl">—</strong>
+            <div class="pnl-sub">
+              <span>Equity <b id="pnl-equity">—</b></span>
+              <span>ROE <b id="pnl-roe">—</b></span>
+            </div>
+            <p>Unrealised profit on the UTA book — updates live.</p>
           </div>
-          <div id="pnl-chart" class="pnl-chart" role="img" aria-label="Live equity chart"></div>
+          <div id="pnl-chart" class="pnl-chart" role="img" aria-label="Live profit chart"></div>
         </section>
 
         <section class="account-strip card ex-kpis" aria-label="Account">

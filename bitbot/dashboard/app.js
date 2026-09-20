@@ -214,23 +214,25 @@
     updateCostStrip();
   }
 
-  const EQ_STORE = 'bitbot.equity.ticks';
+  const EQ_STORE = 'bitbot.pnl.ticks';
   const EQ_MAX = 360;
 
   function loadEquityTicks() {
     try {
-      const raw = sessionStorage.getItem(EQ_STORE);
+      const raw = localStorage.getItem(EQ_STORE) || sessionStorage.getItem(EQ_STORE);
       const parsed = raw ? JSON.parse(raw) : [];
-      if (Array.isArray(parsed)) state.equityTicks = parsed.filter((p) => p && p.t && p.v != null);
+      if (Array.isArray(parsed)) {
+        state.equityTicks = parsed.filter((p) => p && p.t != null && p.v != null);
+      }
     } catch {
       state.equityTicks = [];
     }
   }
 
   function saveEquityTicks() {
-    try {
-      sessionStorage.setItem(EQ_STORE, JSON.stringify(state.equityTicks.slice(-EQ_MAX)));
-    } catch { /* ignore quota */ }
+    const payload = JSON.stringify(state.equityTicks.slice(-EQ_MAX));
+    try { localStorage.setItem(EQ_STORE, payload); } catch { /* ignore */ }
+    try { sessionStorage.setItem(EQ_STORE, payload); } catch { /* ignore */ }
   }
 
   function flash(el, dir) {
@@ -240,10 +242,37 @@
     el.classList.add(dir === 'up' ? 'tick-up' : 'tick-down');
   }
 
+  function ingestPnlHistory(rows) {
+    if (!Array.isArray(rows) || !rows.length) return;
+    const mapped = rows
+      .map((row) => ({
+        t: Math.floor(Number(row.t || row.time || 0)),
+        v: row.upnl != null ? Number(row.upnl) : Number(row.v),
+        e: row.equity != null ? Number(row.equity) : null,
+      }))
+      .filter((p) => Number.isFinite(p.t) && p.t > 0 && Number.isFinite(p.v));
+    if (!mapped.length) return;
+    const byTime = new Map(state.equityTicks.map((p) => [p.t, p]));
+    mapped.forEach((p) => byTime.set(p.t, p));
+    state.equityTicks = [...byTime.values()].sort((a, b) => a.t - b.t).slice(-EQ_MAX);
+    saveEquityTicks();
+    paintPnlSeries();
+  }
+
   function ensureEquityChart() {
     const el = $('#pnl-chart');
-    if (!el || state.equityChart || typeof LightweightCharts === 'undefined') return;
+    if (!el) return;
+    if (typeof LightweightCharts === 'undefined') {
+      setTimeout(ensureEquityChart, 200);
+      return;
+    }
+    if (state.equityChart) {
+      state.equityChart.applyOptions({ width: el.clientWidth || 320 });
+      paintPnlSeries();
+      return;
+    }
     loadEquityTicks();
+    const height = Math.max(180, Math.min(240, Math.round(el.clientWidth * 0.42) || 200));
     state.equityChart = LightweightCharts.createChart(el, {
       layout: {
         background: { color: 'transparent' },
@@ -253,72 +282,95 @@
         vertLines: { visible: false },
         horzLines: { color: 'rgba(255,255,255,0.05)' },
       },
-      rightPriceScale: { borderVisible: false },
-      timeScale: { borderVisible: false, timeVisible: true, secondsVisible: true },
-      crosshair: { vertLine: { visible: false }, horzLine: { visible: false } },
+      rightPriceScale: { borderVisible: false, scaleMargins: { top: 0.18, bottom: 0.12 } },
+      timeScale: { borderVisible: false, timeVisible: true, secondsVisible: false },
+      crosshair: { mode: LightweightCharts.CrosshairMode.Magnet },
       handleScroll: false,
       handleScale: false,
       width: el.clientWidth || 320,
-      height: 168,
+      height,
     });
     state.equitySeries = state.equityChart.addAreaSeries({
       lineColor: '#6dffb0',
       topColor: 'rgba(109, 255, 176, 0.28)',
       bottomColor: 'rgba(109, 255, 176, 0.02)',
       lineWidth: 2,
-      priceLineVisible: false,
+      priceLineVisible: true,
+      lastValueVisible: true,
     });
-    if (state.equityTicks.length) {
-      state.equitySeries.setData(state.equityTicks.map((p) => ({ time: p.t, value: p.v })));
-      state.equityChart.timeScale().fitContent();
-    }
+    paintPnlSeries();
     const ro = new ResizeObserver(() => {
       if (!state.equityChart) return;
-      state.equityChart.applyOptions({ width: el.clientWidth || 320 });
+      state.equityChart.applyOptions({
+        width: el.clientWidth || 320,
+        height: Math.max(180, Math.min(240, Math.round(el.clientWidth * 0.42) || 200)),
+      });
     });
     ro.observe(el);
   }
 
-  function pushEquityTick(acct) {
-    ensureEquityChart();
+  function paintPnlSeries() {
+    if (!state.equitySeries || !state.equityTicks.length) return;
+    const data = state.equityTicks.map((p) => ({ time: p.t, value: p.v }));
+    state.equitySeries.setData(data);
+    const end = state.equityTicks[state.equityTicks.length - 1].v;
+    const up = Number(end) >= 0;
+    state.equitySeries.applyOptions({
+      lineColor: up ? '#6dffb0' : '#ff6b7a',
+      topColor: up ? 'rgba(109, 255, 176, 0.28)' : 'rgba(255, 107, 122, 0.28)',
+      bottomColor: up ? 'rgba(109, 255, 176, 0.02)' : 'rgba(255, 107, 122, 0.02)',
+    });
+    state.equityChart.timeScale().fitContent();
+  }
+
+  function paintPnlHero(equity, upnl) {
     const eqEl = $('#pnl-equity');
     const upEl = $('#pnl-upnl');
-    if (!acct || acct.equity == null) {
-      if (eqEl) eqEl.textContent = '—';
-      if (upEl) upEl.textContent = '—';
+    const roeEl = $('#pnl-roe');
+    if (eqEl) eqEl.textContent = equity != null ? `$${fmt(equity)}` : '—';
+    if (upEl) {
+      const prev = upEl.dataset.raw;
+      upEl.textContent = money(upnl);
+      upEl.className = pnlClass(upnl);
+      upEl.dataset.raw = upnl == null ? '' : String(upnl);
+      if (prev && upnl != null && Number(prev) !== Number(upnl)) {
+        flash(upEl, Number(upnl) >= Number(prev) ? 'up' : 'down');
+      }
+    }
+    if (roeEl) {
+      if (equity != null && upnl != null) {
+        const basis = Number(equity) - Number(upnl);
+        roeEl.textContent = Math.abs(basis) > 0.01 ? fmtPct((Number(upnl) / basis) * 100) : '—';
+        roeEl.className = pnlClass(upnl);
+      } else {
+        roeEl.textContent = '—';
+      }
+    }
+  }
+
+  function pushEquityTick(acct) {
+    ensureEquityChart();
+    if (!acct || (acct.equity == null && acct.unrealised_pnl == null)) {
+      paintPnlHero(null, null);
       return;
     }
-    const equity = Number(acct.equity);
-    const upnl = acct.unrealised_pnl != null ? Number(acct.unrealised_pnl) : null;
-    if (eqEl) {
-      const prev = eqEl.dataset.raw;
-      eqEl.textContent = `$${fmt(equity)}`;
-      eqEl.dataset.raw = String(equity);
-      if (prev != null && Number(prev) !== equity) flash(eqEl, equity >= Number(prev) ? 'up' : 'down');
-    }
-    if (upEl) {
-      upEl.textContent = money(upnl);
-      upEl.className = `pnl-chip ${pnlClass(upnl)}`;
-    }
+    const equity = acct.equity != null ? Number(acct.equity) : null;
+    const upnl = acct.unrealised_pnl != null ? Number(acct.unrealised_pnl) : 0;
+    paintPnlHero(equity, upnl);
     const now = Math.floor(Date.now() / 1000);
+    if (!state.equityTicks.length) {
+      state.equityTicks.push({ t: now - 90, v: 0, e: equity != null ? equity - upnl : null });
+    }
     const last = state.equityTicks[state.equityTicks.length - 1];
-    if (last && last.t === now) last.v = equity;
-    else if (!last || last.v !== equity || now - last.t >= 1) state.equityTicks.push({ t: now, v: equity });
+    if (last && last.t === now) {
+      last.v = upnl;
+      last.e = equity;
+    } else {
+      state.equityTicks.push({ t: now, v: upnl, e: equity });
+    }
     if (state.equityTicks.length > EQ_MAX) state.equityTicks = state.equityTicks.slice(-EQ_MAX);
     saveEquityTicks();
-    if (state.equitySeries && state.equityTicks.length) {
-      const data = state.equityTicks.map((p) => ({ time: p.t, value: p.v }));
-      state.equitySeries.setData(data);
-      const start = state.equityTicks[0].v;
-      const end = state.equityTicks[state.equityTicks.length - 1].v;
-      const up = end >= start;
-      state.equitySeries.applyOptions({
-        lineColor: up ? '#6dffb0' : '#ff6b7a',
-        topColor: up ? 'rgba(109, 255, 176, 0.28)' : 'rgba(255, 107, 122, 0.28)',
-        bottomColor: up ? 'rgba(109, 255, 176, 0.02)' : 'rgba(255, 107, 122, 0.02)',
-      });
-      state.equityChart.timeScale().fitContent();
-    }
+    paintPnlSeries();
   }
 
   function setText(id, value, className) {
@@ -598,6 +650,9 @@
       applyLiveLock(Boolean(data.live_trading), data.live_lock || '');
       ok = true;
     }
+    if (Array.isArray(data.pnl_history)) {
+      ingestPnlHistory(data.pnl_history);
+    }
     if (Array.isArray(data.positions)) {
       renderPositions(data.positions);
       ok = true;
@@ -605,6 +660,9 @@
     }
     if (data.account) {
       renderAccount(data.account);
+      ok = true;
+    } else if (data.equity != null || data.unrealised_pnl != null) {
+      pushEquityTick({ equity: data.equity, unrealised_pnl: data.unrealised_pnl });
       ok = true;
     }
     if (Array.isArray(data.alerts) && data.alerts.length) {
@@ -710,6 +768,7 @@
         showNotice(pos.error, 'warn');
       }
       if (acct && acct.ok) {
+        if (Array.isArray(acct.pnl_history)) ingestPnlHistory(acct.pnl_history);
         renderAccount(acct.account);
         okAny = true;
       }

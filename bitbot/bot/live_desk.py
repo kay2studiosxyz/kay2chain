@@ -13,6 +13,7 @@ import os
 import threading
 import time
 import types
+from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -20,7 +21,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-DESK_VERSION = "desk-2.1.1"
+DESK_VERSION = "desk-2.1.2"
 DESK_MODE = "PAPER_WATCH"
 CACHE_TTL_SECONDS = 3.0
 TICKER_TTL_SECONDS = 1.5
@@ -56,6 +57,30 @@ LIVE_UNLOCK_FILE = REBUILD_ROOT / "data" / "LIVE_OK"
 _lock = threading.Lock()
 _cache: dict[str, Any] = {"expires": 0.0, "payload": None, "error": None}
 _fetching = threading.Event()
+_pnl_lock = threading.Lock()
+_pnl_history: deque[dict[str, Any]] = deque(maxlen=240)
+
+
+def _record_pnl(account: dict[str, Any] | None) -> None:
+    if not isinstance(account, dict):
+        return
+    equity = account.get("equity")
+    upnl = account.get("unrealised_pnl")
+    if equity is None and upnl is None:
+        return
+    now = int(time.time())
+    point = {"t": now, "equity": equity, "upnl": upnl}
+    with _pnl_lock:
+        last = _pnl_history[-1] if _pnl_history else None
+        if last and int(last.get("t") or 0) == now:
+            last.update(point)
+            return
+        _pnl_history.append(point)
+
+
+def pnl_history() -> list[dict[str, Any]]:
+    with _pnl_lock:
+        return [dict(row) for row in _pnl_history]
 _fetch_lock = threading.Lock()
 _ticker_cache: dict[str, Any] = {}
 _candles_cache: dict[str, Any] = {}
@@ -363,6 +388,8 @@ def get_snapshot(force: bool = False) -> dict[str, Any]:
             _cache["payload"] = payload
             _cache["expires"] = time.monotonic() + CACHE_TTL_SECONDS
             _cache["error"] = None
+        live_acct = (fresh or {}).get("account") if isinstance(fresh, dict) else None
+        _record_pnl(live_acct if isinstance(live_acct, dict) else None)
         return dict(payload)
     except Exception as exc:  # noqa: BLE001
         err_msg = str(exc)[:300]
@@ -424,6 +451,7 @@ def account_payload() -> dict[str, Any]:
         "stale": bool(snap.get("stale")),
         "account": live.get("account"),
         "category_errors": live.get("category_errors") or [],
+        "pnl_history": pnl_history(),
     }
 
 
@@ -484,6 +512,9 @@ def desk_summary(paper_session: dict[str, Any] | None = None) -> dict[str, Any]:
             "stale": paper_session.get("stale"),
         }
 
+    if account:
+        _record_pnl(account)
+
     lock = live_unlock_status()
     return {
         "ok": bool(snap.get("ok")),
@@ -501,6 +532,7 @@ def desk_summary(paper_session: dict[str, Any] | None = None) -> dict[str, Any]:
         "live_lock": lock.get("message"),
         "alerts": alerts or None,
         "error": None if snap.get("ok") else snap.get("error"),
+        "pnl_history": pnl_history(),
     }
 
 
