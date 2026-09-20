@@ -1266,6 +1266,82 @@
     });
   }
 
+  let paperTrades = [];
+
+  function renderPaperLab(data) {
+    const lab = $('#paper-lab');
+    if (!lab || !data) return;
+    const halt = data.halt;
+    const ev = data.performance_evidence || {};
+    const metrics = data.metrics || {};
+    const session = data.session || {};
+    setText('paper-label', session.label || 'Simulated session · read-only');
+    const statusEl = $('#paper-status');
+    if (statusEl) {
+      statusEl.textContent = halt ? 'HALTED' : (session.status || '—');
+      statusEl.className = `status-badge ${halt ? 'warn' : 'neutral'}`;
+    }
+    const haltEl = $('#paper-halt');
+    if (haltEl) {
+      haltEl.hidden = !halt;
+      haltEl.textContent = halt || '';
+    }
+    const netEl = $('#paper-net');
+    if (netEl) {
+      netEl.textContent = money(metrics.net_usdt);
+      netEl.className = pnlClass(metrics.net_usdt);
+    }
+    setText('paper-closed', metrics.closed_trades != null ? String(metrics.closed_trades) : '—');
+    setText('paper-win', metrics.win_rate != null ? fmtPct(Number(metrics.win_rate) * 100) : '—');
+    const scoreEl = $('#paper-score');
+    if (scoreEl) {
+      scoreEl.textContent = ev.status || '—';
+      scoreEl.className = ev.status === 'PASS' ? 'up' : '';
+    }
+    const pace = [];
+    if (ev.observed_closed_trades_per_day != null) {
+      pace.push(`${fmt(ev.observed_closed_trades_per_day, 1)} / ${fmt(ev.target_closed_trades_per_day, 0)} trades/day`);
+    }
+    if (ev.observed_net_usdt_per_day != null) {
+      pace.push(`${money(ev.observed_net_usdt_per_day)} / day vs ${money(ev.target_net_usdt_per_day)} target`);
+    }
+    setText('paper-pace', pace.join(' · ') || '—');
+    paperTrades = Array.isArray(data.trades) ? data.trades : [];
+    if (halt && !state.liveUnlocked) {
+      const badge = $('#mode-badge span');
+      if (badge) badge.textContent = 'PAPER · HALTED';
+    }
+  }
+
+  async function loadPaperLab() {
+    try {
+      const { data } = await api('/api/dashboard', { timeoutMs: 15000 });
+      if (data && (data.metrics || data.halt || data.session)) renderPaperLab(data);
+    } catch {
+      /* keep last paper snapshot */
+    }
+  }
+
+  function exportPaperTrades() {
+    if (!paperTrades.length) {
+      showNotice('No closed paper trades to export.', 'warn');
+      return;
+    }
+    const cols = ['at', 'symbol', 'side', 'entry', 'exit', 'qty', 'net_usdt', 'roi_pct'];
+    const lines = [cols.join(',')].concat(paperTrades.map((row) => cols.map((key) => {
+      const value = row[key];
+      if (value == null) return '';
+      const text = String(value);
+      return text.includes(',') ? `"${text}"` : text;
+    }).join(',')));
+    const blob = new Blob([`${lines.join('\n')}\n`], { type: 'text/csv' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'bitbot-paper-trades.csv';
+    link.click();
+    URL.revokeObjectURL(link.href);
+  }
+
   function boot() {
     paintIcons();
     loadEquityTicks();
@@ -1276,6 +1352,12 @@
     setView(hashView());
     ukClock();
     setInterval(ukClock, 1000);
+    loadPaperLab();
+    setInterval(loadPaperLab, 30000);
+    if ($('#export-trades')) $('#export-trades').addEventListener('click', exportPaperTrades);
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./service-worker.js').catch(() => {});
+    }
     startDeskStream();
     window.addEventListener('pagehide', stopDeskStream);
     document.addEventListener('visibilitychange', () => {
