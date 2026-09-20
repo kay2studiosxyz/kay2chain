@@ -6,7 +6,7 @@
   const POLL_CANDLE_MS = 15000;
 
   const state = {
-    view: 'overview',
+    view: 'portfolio',
     positions: [],
     account: null,
     symbol: 'SOLUSDT',
@@ -141,6 +141,7 @@
   }
 
   function setView(name) {
+    if (name === 'overview') name = 'portfolio';
     state.view = name;
     $$('.nav-link').forEach((a) => a.classList.toggle('active', a.dataset.view === name));
     $$('.view').forEach((p) => {
@@ -148,14 +149,14 @@
       p.hidden = !on;
     });
     const titles = {
-      overview: ['Overview', 'Open UTA positions, equity, and mark prices.'],
-      charts: ['Charts', 'Bitget candles · near-realtime mark.'],
+      portfolio: ['Portfolio', 'Balances, margin, and open UTA positions.'],
+      charts: ['Markets', 'Bitget candles · near-realtime mark.'],
       trade: ['Trade', 'Exchange ticket · available USDT, leverage & size sliders.'],
     };
-    const [t, d] = titles[name] || titles.overview;
-    $('#page-title').textContent = t;
-    $('#page-description').textContent = d;
-    $('#crumb').textContent = t;
+    const [t, d] = titles[name] || titles.portfolio;
+    if ($('#page-title')) $('#page-title').textContent = t;
+    if ($('#page-description')) $('#page-description').textContent = d;
+    if ($('#crumb')) $('#crumb').textContent = t;
     if (name === 'charts') {
       ensureChart();
       loadCandles(true);
@@ -168,8 +169,9 @@
   }
 
   function hashView() {
-    const h = (location.hash || '#overview').replace('#', '');
-    return ['overview', 'charts', 'trade'].includes(h) ? h : 'overview';
+    let h = (location.hash || '#portfolio').replace('#', '');
+    if (h === 'overview') h = 'portfolio';
+    return ['portfolio', 'charts', 'trade'].includes(h) ? h : 'portfolio';
   }
 
   function usdtAsset(acct) {
@@ -206,26 +208,100 @@
     updateCostStrip();
   }
 
+  function setText(id, value, className) {
+    const el = typeof id === 'string' ? document.getElementById(id) : id;
+    if (!el) return;
+    el.textContent = value;
+    if (className !== undefined) el.className = className;
+  }
+
+  function renderAssets(acct) {
+    const body = $('#assets-body');
+    if (!body) return;
+    const assets = (acct && acct.assets) || [];
+    if (!assets.length) {
+      body.innerHTML = '<tr><td colspan="5" class="empty-cell">No assets.</td></tr>';
+      return;
+    }
+    body.innerHTML = assets.map((a) => `<tr>
+      <td class="coin"><strong>${a.coin || '—'}</strong></td>
+      <td>${a.equity != null ? fmt(a.equity, 4) : '—'}</td>
+      <td>${a.available != null ? fmt(a.available, 4) : '—'}</td>
+      <td>${a.balance != null ? fmt(a.balance, 4) : '—'}</td>
+      <td>${a.usd_value != null ? '$' + fmt(a.usd_value) : '—'}</td>
+    </tr>`).join('');
+  }
+
+  function renderMargin(acct) {
+    if (!acct) {
+      ['m-used', 'm-buffer', 'm-imr', 'm-mmr', 'm-eff', 'm-upnl'].forEach((id) => setText(id, '—'));
+      const usedBar = $('#m-used-bar');
+      const bufBar = $('#m-buffer-bar');
+      if (usedBar) usedBar.style.width = '0%';
+      if (bufBar) bufBar.style.width = '0%';
+      return;
+    }
+    const imr = acct.imr != null ? Number(acct.imr) : null;
+    const mmr = acct.mmr != null ? Number(acct.mmr) : null;
+    const usedPct = imr != null ? Math.max(0, Math.min(100, imr * 100)) : 0;
+    const bufferPct = mmr != null ? Math.max(0, Math.min(100, (1 - mmr) * 100)) : 0;
+    setText('m-used', imr != null ? `${fmt(usedPct, 1)}%` : '—');
+    setText('m-buffer', mmr != null ? `${fmt(bufferPct, 1)}%` : '—');
+    setText('m-imr', imr != null ? fmt(imr, 4) : '—');
+    setText('m-mmr', mmr != null ? fmt(mmr, 4) : '—');
+    setText('m-eff', acct.eff_equity != null ? `$${fmt(acct.eff_equity)}` : (acct.equity != null ? `$${fmt(acct.equity)}` : '—'));
+    const upEl = $('#m-upnl');
+    if (upEl) {
+      upEl.textContent = money(acct.unrealised_pnl);
+      upEl.className = pnlClass(acct.unrealised_pnl);
+    }
+    const usedBar = $('#m-used-bar');
+    const bufBar = $('#m-buffer-bar');
+    if (usedBar) usedBar.style.width = `${usedPct}%`;
+    if (bufBar) bufBar.style.width = `${bufferPct}%`;
+  }
+
   function renderAccount(acct) {
     state.account = acct;
+    const usdt = usdtAsset(acct);
+    const avail = usdt && usdt.available != null ? usdt.available : null;
+    const upnl = acct && acct.unrealised_pnl;
+    const mmr = acct && acct.mmr != null ? fmt(acct.mmr, 2) : '—';
+    const imr = acct && acct.imr != null ? fmt(acct.imr, 2) : '—';
+
     if (!acct) {
-      $('#acct-equity').textContent = '—';
-      $('#acct-upnl').textContent = '—';
-      $('#acct-avail').textContent = '—';
-      $('#acct-mmr').textContent = '—';
+      ['acct-equity', 'top-equity', 'side-equity', 'acct-upnl', 'top-upnl',
+       'acct-avail', 'top-avail', 'side-avail', 'acct-mmr', 'top-mmr',
+       'acct-posval', 'acct-lev'].forEach((id) => setText(id, '—'));
+      renderAssets(null);
+      renderMargin(null);
       paintTradeBalances();
       return;
     }
-    $('#acct-equity').textContent = acct.equity != null ? `$${fmt(acct.equity)}` : '—';
-    const upnl = acct.unrealised_pnl;
-    const up = $('#acct-upnl');
-    up.textContent = money(upnl);
-    up.className = pnlClass(upnl);
-    const usdt = usdtAsset(acct);
-    $('#acct-avail').textContent = usdt && usdt.available != null ? `$${fmt(usdt.available)}` : '—';
-    const mmr = acct.mmr != null ? fmt(acct.mmr, 2) : '—';
-    const imr = acct.imr != null ? fmt(acct.imr, 2) : '—';
-    $('#acct-mmr').textContent = `${mmr} / ${imr}`;
+
+    const eq = acct.equity != null ? `$${fmt(acct.equity)}` : '—';
+    const av = avail != null ? `$${fmt(avail)}` : '—';
+    const avPlain = avail != null ? fmt(avail) : '—';
+    setText('acct-equity', eq);
+    setText('top-equity', eq);
+    setText('side-equity', eq);
+    setText('acct-avail', av);
+    setText('top-avail', av);
+    setText('side-avail', avPlain);
+    setText('acct-mmr', `${mmr} / ${imr}`);
+    setText('top-mmr', mmr);
+    setText('acct-posval', acct.position_value != null ? `$${fmt(acct.position_value)}` : '—');
+    setText('acct-lev', acct.leverage != null ? `${fmt(acct.leverage, 2)}×` : '—');
+
+    ['acct-upnl', 'top-upnl'].forEach((id) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.textContent = money(upnl);
+      el.className = pnlClass(upnl);
+    });
+
+    renderAssets(acct);
+    renderMargin(acct);
     paintTradeBalances();
   }
 
@@ -262,35 +338,70 @@
     </article>`;
   }
 
+  function goChart(sym) {
+    state.symbol = sym;
+    location.hash = 'charts';
+    setView('charts');
+    buildSymbolSwitch();
+    loadCandles(true);
+    loadTicker();
+  }
+
+  function goTrade(sym) {
+    ensureSymbolOption(sym);
+    const sel = $('#t-symbol');
+    if (sel) sel.value = sym;
+    location.hash = 'trade';
+    setView('trade');
+  }
+
+  function positionRow(p) {
+    const side = (p.side || '').toLowerCase();
+    const upnl = p.unrealised_pnl;
+    const roe = p.pnl_pct;
+    return `<tr class="pos-row ${side}">
+      <td class="contract"><strong>${p.symbol || '—'}</strong><span>${p.leverage != null ? fmt(p.leverage, 0) + '×' : ''} ${p.margin_mode || ''}</span></td>
+      <td><span class="side-pill ${side}">${side || '—'}</span></td>
+      <td>${fmt(p.size, 4)}</td>
+      <td>${fmtPx(p.entry)}</td>
+      <td class="mark">${fmtPx(p.mark)}</td>
+      <td>${fmtPx(p.liq)}</td>
+      <td>${p.margin != null ? '$' + fmt(p.margin) : '—'}</td>
+      <td class="${pnlClass(upnl)}">${money(upnl)}</td>
+      <td class="${pnlClass(roe)}">${fmtPct(roe)}</td>
+      <td class="pos-actions">
+        <button type="button" class="text-button" data-chart-sym="${p.symbol}">Chart</button>
+        <button type="button" class="text-button" data-trade-sym="${p.symbol}">Trade</button>
+      </td>
+    </tr>`;
+  }
+
+  function wirePosActions(root) {
+    if (!root) return;
+    root.querySelectorAll('[data-chart-sym]').forEach((btn) => {
+      btn.addEventListener('click', () => goChart(btn.dataset.chartSym));
+    });
+    root.querySelectorAll('[data-trade-sym]').forEach((btn) => {
+      btn.addEventListener('click', () => goTrade(btn.dataset.tradeSym));
+    });
+  }
+
   function renderPositions(list) {
     state.positions = list || [];
     const root = $('#positions-hero');
-    $('#nav-pos').textContent = String(state.positions.length || 0);
-    $('#pos-count').textContent = `${state.positions.length} open`;
+    const body = $('#positions-body');
+    if ($('#nav-pos')) $('#nav-pos').textContent = String(state.positions.length || 0);
+    if ($('#pos-count')) $('#pos-count').textContent = `${state.positions.length} open`;
     if (!state.positions.length) {
-      root.innerHTML = '<div class="empty-pos card">No open UTA positions.</div>';
+      if (root) root.innerHTML = '<div class="empty-pos card">No open UTA positions.</div>';
+      if (body) body.innerHTML = '<tr><td colspan="10" class="empty-cell">No open positions.</td></tr>';
+      syncTradeSymbols();
       return;
     }
-    root.innerHTML = state.positions.map(positionCard).join('');
-    root.querySelectorAll('[data-chart-sym]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        state.symbol = btn.dataset.chartSym;
-        location.hash = 'charts';
-        setView('charts');
-        buildSymbolSwitch();
-        loadCandles(true);
-        loadTicker();
-      });
-    });
-    root.querySelectorAll('[data-trade-sym]').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        const sel = $('#t-symbol');
-        ensureSymbolOption(btn.dataset.tradeSym);
-        sel.value = btn.dataset.tradeSym;
-        location.hash = 'trade';
-        setView('trade');
-      });
-    });
+    if (body) body.innerHTML = state.positions.map(positionRow).join('');
+    if (root) root.innerHTML = state.positions.map(positionCard).join('');
+    wirePosActions(body);
+    wirePosActions(root);
     syncTradeSymbols();
   }
 

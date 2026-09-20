@@ -7,8 +7,8 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Bitbot">
   <meta name="theme-color" content="#0d1216">
-  <meta name="description" content="Bitbot trading desk — live Bitget UTA positions, charts, and dry-run trade ticket. LIVE locked by default.">
-  <title>Bitbot · Desk</title>
+  <meta name="description" content="Bitbot exchange desk — live Bitget UTA portfolio, positions, charts, and trade ticket. LIVE locked by default.">
+  <title>Bitbot · Exchange</title>
   <link rel="icon" type="image/svg+xml" href="./favicon.svg">
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png">
@@ -17,23 +17,23 @@
   <script src="./lightweight-charts.js" defer></script>
   <script src="./app.js" defer></script>
 </head>
-<body class="desk2">
+<body class="desk2 exchange-shell">
   <a class="skip" href="#main">Skip to desk</a>
   <aside class="sidebar">
-    <a class="brand" href="#overview" aria-label="Bitbot overview">
+    <a class="brand" href="#portfolio" aria-label="Bitbot portfolio">
       <span class="brand-mark" aria-hidden="true">b<span>·</span></span>
-      <span>bitbot<span class="brand-sub">DESK</span></span>
+      <span>bitbot<span class="brand-sub">EXCHANGE</span></span>
     </a>
-    <div class="workspace-label">KANE · BITGET UTA</div>
-    <nav class="navigation" aria-label="Desk navigation">
-      <a href="#overview" data-view="overview" class="nav-link active"><span data-icon="grid"></span><span>Overview</span><span class="nav-count" id="nav-pos">—</span></a>
-      <a href="#charts" data-view="charts" class="nav-link"><span data-icon="pulse"></span><span>Charts</span></a>
+    <div class="workspace-label">USDT-M · BITGET UTA</div>
+    <nav class="navigation" aria-label="Exchange navigation">
+      <a href="#portfolio" data-view="portfolio" class="nav-link active"><span data-icon="grid"></span><span>Portfolio</span><span class="nav-count" id="nav-pos">—</span></a>
       <a href="#trade" data-view="trade" class="nav-link"><span data-icon="arrows"></span><span>Trade</span></a>
+      <a href="#charts" data-view="charts" class="nav-link"><span data-icon="pulse"></span><span>Markets</span></a>
     </nav>
     <div class="sidebar-note">
-      <span class="tiny-label">MODE</span>
-      <strong>Positions first.<br>Simulate before live.</strong>
-      <p>UK desk · mark prices from Bitget.</p>
+      <span class="tiny-label">ACCOUNT</span>
+      <strong id="side-equity">$—</strong>
+      <p><span id="side-avail-label">Available</span> <span id="side-avail">—</span> USDT</p>
       <span class="paper-tag watch-tag" id="mode-chip"><i></i> PAPER / WATCH</span>
     </div>
     <div class="sidebar-bottom">
@@ -44,11 +44,17 @@
   </aside>
 
   <div class="app-shell">
-    <header class="topbar">
+    <header class="topbar exchange-topbar">
       <div class="breadcrumb">
         <span class="mobile-brand">bitbot<span>·</span></span>
-        <span class="desktop-crumb">Desk <span>/</span></span>
-        <strong id="crumb">Overview</strong>
+        <span class="desktop-crumb">Exchange <span>/</span></span>
+        <strong id="crumb">Portfolio</strong>
+      </div>
+      <div class="top-equity" aria-label="Account summary">
+        <div><span>Equity</span><strong id="top-equity">—</strong></div>
+        <div><span>uPnL</span><strong id="top-upnl">—</strong></div>
+        <div><span>Available</span><strong id="top-avail">—</strong></div>
+        <div class="hide-sm"><span>MMR</span><strong id="top-mmr">—</strong></div>
       </div>
       <div class="topbar-right">
         <span class="connection" id="connection"><i></i><span>Connecting</span></span>
@@ -58,12 +64,12 @@
     </header>
 
     <main id="main" tabindex="-1">
-      <section class="page-heading desk-heading">
+      <section class="page-heading desk-heading exchange-heading">
         <div>
-          <div class="eyebrow"><span class="small-square"></span> BITBOT · TRADING DESK</div>
+          <div class="eyebrow"><span class="small-square"></span> BITBOT · USDT-M PERPETUALS</div>
           <div class="mode-badge" id="mode-badge" title="Default dry-run — LIVE needs Kane unlock"><i></i><span>PAPER / WATCH</span></div>
-          <h1 id="page-title">Overview</h1>
-          <p id="page-description">Open UTA positions, equity, and mark prices.</p>
+          <h1 id="page-title">Portfolio</h1>
+          <p id="page-description">Balances, margin, and open UTA positions.</p>
         </div>
         <div class="desk-clock">
           <span class="tiny-label">UK TIME</span>
@@ -73,20 +79,101 @@
       </section>
       <div class="notice" id="notice" role="status" hidden></div>
 
-      <!-- OVERVIEW -->
-      <div class="view" data-panel="overview">
-        <section class="account-strip card" aria-label="Account">
+      <!-- PORTFOLIO -->
+      <div class="view" data-panel="portfolio">
+        <section class="account-strip card ex-kpis" aria-label="Account">
           <div class="live-desk-metrics large" id="account-metrics">
             <div><span>Equity</span><strong id="acct-equity">—</strong></div>
             <div><span>Unrealised PnL</span><strong id="acct-upnl">—</strong></div>
             <div><span>Available</span><strong id="acct-avail">—</strong></div>
             <div><span>MMR / IMR</span><strong id="acct-mmr">—</strong></div>
+            <div><span>Position value</span><strong id="acct-posval">—</strong></div>
+            <div><span>Account lev</span><strong id="acct-lev">—</strong></div>
           </div>
         </section>
 
+        <div class="portfolio-grid">
+          <section class="card assets-card">
+            <div class="card-top">
+              <h2>Assets</h2>
+              <span class="quiet-label">Wallet · UTA</span>
+            </div>
+            <div class="table-wrap">
+              <table class="ex-table" id="assets-table">
+                <thead>
+                  <tr>
+                    <th>Coin</th>
+                    <th>Equity</th>
+                    <th>Available</th>
+                    <th>Balance</th>
+                    <th>USD value</th>
+                  </tr>
+                </thead>
+                <tbody id="assets-body">
+                  <tr><td colspan="5" class="empty-cell">Waiting for account…</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="card margin-card">
+            <div class="card-top">
+              <h2>Margin</h2>
+              <span class="quiet-label">Cross</span>
+            </div>
+            <div class="margin-meters">
+              <div>
+                <div class="meter-head"><span>Margin used</span><strong id="m-used">—</strong></div>
+                <div class="meter"><i id="m-used-bar" style="width:0%"></i></div>
+              </div>
+              <div>
+                <div class="meter-head"><span>Maint. buffer</span><strong id="m-buffer">—</strong></div>
+                <div class="meter warn"><i id="m-buffer-bar" style="width:0%"></i></div>
+              </div>
+            </div>
+            <dl class="margin-dl">
+              <div><dt>IMR</dt><dd id="m-imr">—</dd></div>
+              <div><dt>MMR</dt><dd id="m-mmr">—</dd></div>
+              <div><dt>Eff. equity</dt><dd id="m-eff">—</dd></div>
+              <div><dt>uPnL</dt><dd id="m-upnl">—</dd></div>
+            </dl>
+          </section>
+        </div>
+
         <div class="section-heading">
-          <div><h2>Open positions</h2><span>Priority · live stream</span></div>
-          <span class="quiet-label" id="pos-count">—</span>
+          <div><h2>Positions</h2><span>Live · Bitget UTA</span></div>
+          <div class="pos-heading-actions">
+            <span class="quiet-label" id="pos-count">—</span>
+            <a class="text-button" href="#trade">Open trade →</a>
+          </div>
+        </div>
+
+        <section class="card positions-table-card">
+          <div class="table-wrap">
+            <table class="ex-table positions-table">
+              <thead>
+                <tr>
+                  <th>Contract</th>
+                  <th>Side</th>
+                  <th>Size</th>
+                  <th>Entry</th>
+                  <th>Mark</th>
+                  <th>Liq</th>
+                  <th>Margin</th>
+                  <th>uPnL</th>
+                  <th>ROE</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="positions-body">
+                <tr><td colspan="10" class="empty-cell">No open positions.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <div class="section-heading mobile-only-heading">
+          <div><h2>Position cards</h2><span>Mobile</span></div>
         </div>
         <div id="positions-hero" class="positions-hero" aria-live="polite"></div>
       </div>
