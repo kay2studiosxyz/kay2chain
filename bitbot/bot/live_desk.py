@@ -20,11 +20,14 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-DESK_VERSION = "desk-2.1.0"
+DESK_VERSION = "desk-2.1.1"
 DESK_MODE = "PAPER_WATCH"
 CACHE_TTL_SECONDS = 3.0
 TICKER_TTL_SECONDS = 1.5
 CANDLES_TTL_SECONDS = 8.0
+FILLS_TTL_SECONDS = 5.0
+FILLS_LIMIT_DEFAULT = 80
+FILLS_LIMIT_MAX = 200
 CATEGORIES = ("USDT-FUTURES", "USDC-FUTURES")
 ALLOWED_CATEGORIES = frozenset(
     {"USDT-FUTURES", "USDC-FUTURES", "COIN-FUTURES", "SPOT"}
@@ -56,6 +59,7 @@ _fetching = threading.Event()
 _fetch_lock = threading.Lock()
 _ticker_cache: dict[str, Any] = {}
 _candles_cache: dict[str, Any] = {}
+_fills_cache: dict[str, Any] = {}
 _client_mod: types.ModuleType | None = None
 
 
@@ -539,6 +543,163 @@ def _public_get(path: str, params: dict[str, Any]) -> Any:
     if str(payload.get("code")) != "00000":
         raise RuntimeError(str(payload.get("msg") or "Bitget error")[:200])
     return payload.get("data")
+
+
+def _classify_fill_side(row: dict[str, Any]) -> str | None:
+    """Map Bitget fill fields to buy/sell for chart bubbles."""
+    side = str(row.get("side") or "").strip().lower()
+    if side in {"buy", "b", "bid", "long"}:
+        return "buy"
+    if side in {"sell", "s", "ask", "short"}:
+        return "sell"
+    trade_side = str(row.get("tradeSide") or "").strip().lower()
+    if trade_side.startswith("buy"):
+        return "buy"
+    if trade_side.startswith("sell"):
+        return "sell"
+    pos = str(row.get("posSide") or "").strip().lower()
+    # Heuristic: opening long ≈ buy bubble; opening short ≈ sell bubble.
+    if pos == "long" and "open" in trade_side:
+        return "buy"
+    if pos == "short" and "open" in trade_side:
+        return "sell"
+    if pos == "long" and "close" in trade_side:
+        return "sell"
+    if pos == "short" and "close" in trade_side:
+        return "buy"
+    return None
+
+
+def _normalize_fill(row: dict[str, Any], symbol: str, category: str) -> dict[str, Any] | None:
+    if not isinstance(row, dict):
+        return None
+    side = _classify_fill_side(row)
+    if side is None:
+        return None
+    price = _num(row.get("price") or row.get("execPrice"))
+    qty = _num(row.get("baseVolume") or row.get("execQty") or row.get("size"))
+    raw_t = row.get("cTime") or row.get("createdTime") or row.get("updatedTime") or row.get("ts")
+    try:
+        ts_ms = int(str(raw_t).strip())
+    except (TypeError, ValueError):
+        return None
+    # Bitget sometimes returns seconds; normalise to ms.
+    if ts_ms < 10_000_000_000:
+        ts_ms *= 1000
+    if price is None or qty is None or qty <= 0:
+        return None
+    return {
+        "id": str(row.get("tradeId") or row.get("fillId") or row.get("orderId") or f"{symbol}-{ts_ms}-{side}")[:80],
+        "symbol": symbol,
+        "category": category,
+        "side": side,
+        "price": price,
+        "qty": qty,
+        "ts_ms": ts_ms,
+        "time": ts_ms // 1000,
+        "pos_side": str(row.get("posSide") or "")[:16] or None,
+        "source": "bitget",
+    }
+
+
+async def _fetch_fills(symbol: str, category: str, limit: int) -> list[dict[str, Any]]:
+    env = _load_env(PERPS_ENV)
+    key = env.get("BITGET_API_KEY") or os.environ.get("BITGET_API_KEY")
+    secret = env.get("BITGET_API_SECRET") or os.environ.get("BITGET_API_SECRET")
+    passphrase = env.get("BITGET_API_PASSPHRASE") or os.environ.get("BITGET_API_PASSPHRASE")
+    if not key or not secret or not passphrase:
+        raise RuntimeError("Bitget credentials unavailable for fills")
+
+    mod = _load_perps_bitget()
+    client = mod.BitgetClient(
+        api_key=key,
+        api_secret=secret,
+        passphrase=passphrase,
+        product_type=category if category.endswith("FUTURES") else "USDT-FUTURES",
+        margin_coin="USDT",
+    )
+    try:
+        await client.sync_clock()
+        if hasattr(client, "fills"):
+            rows = await client.fills(symbol, limit=limit)
+        else:
+            data = await client._request(
+                "GET",
+                "/api/v3/trade/fills",
+                params={"category": category, "symbol": symbol, "limit": limit},
+            )
+            rows = (data or {}).get("list") or []
+    finally:
+        await client.close()
+
+    out: list[dict[str, Any]] = []
+    for row in rows or []:
+        normalized = _normalize_fill(row, symbol, category)
+        if normalized:
+            out.append(normalized)
+    out.sort(key=lambda item: item["ts_ms"])
+    return out
+
+
+def fills_payload(
+    symbol: str,
+    category: str | None = None,
+    limit: int | None = None,
+) -> dict[str, Any]:
+    """Recent Bitget fills for chart buy/sell bubbles."""
+    sym = _normalize_symbol(symbol)
+    cat = _normalize_category(category)
+    lim = FILLS_LIMIT_DEFAULT if limit is None else int(limit)
+    lim = max(1, min(FILLS_LIMIT_MAX, lim))
+    cache_key = f"{cat}:{sym}:{lim}"
+    now = time.monotonic()
+    with _lock:
+        hit = _fills_cache.get(cache_key)
+        if hit and now < hit["expires"]:
+            return dict(hit["payload"])
+
+    try:
+        fills = asyncio.run(_fetch_fills(sym, cat, lim))
+        payload = {
+            "ok": True,
+            "mode": DESK_MODE,
+            "version": DESK_VERSION,
+            "ts": _utcnow(),
+            "symbol": sym,
+            "category": cat,
+            "fills": fills,
+            "count": len(fills),
+            "stale": False,
+        }
+        with _lock:
+            _fills_cache[cache_key] = {
+                "expires": time.monotonic() + FILLS_TTL_SECONDS,
+                "payload": payload,
+            }
+            if len(_fills_cache) > 48:
+                for k in list(_fills_cache.keys())[:12]:
+                    _fills_cache.pop(k, None)
+        return payload
+    except Exception as exc:  # noqa: BLE001
+        with _lock:
+            hit = _fills_cache.get(cache_key)
+            if hit:
+                stale = dict(hit["payload"])
+                stale["stale"] = True
+                stale["error"] = str(exc)[:200]
+                stale["ts"] = _utcnow()
+                return stale
+        return {
+            "ok": False,
+            "mode": DESK_MODE,
+            "version": DESK_VERSION,
+            "ts": _utcnow(),
+            "symbol": sym,
+            "category": cat,
+            "fills": [],
+            "count": 0,
+            "error": str(exc)[:200],
+        }
 
 
 def ticker_payload(symbol: str, category: str | None = None) -> dict[str, Any]:

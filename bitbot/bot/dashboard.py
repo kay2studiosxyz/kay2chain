@@ -862,10 +862,15 @@ def make_handler(store):
                         except Exception:
                             paper = None
                         self._json(200, live_desk.desk_summary(paper))
-                elif parsed.path in ("/api/ticker", "/api/candles"):
+                elif parsed.path in ("/api/ticker", "/api/candles", "/api/fills"):
                     from bot import live_desk
                     query = parse_qs(parsed.query, keep_blank_values=True, max_num_fields=8)
-                    allowed = {"symbol", "category", "granularity", "limit"} if parsed.path == "/api/candles" else {"symbol", "category"}
+                    if parsed.path == "/api/candles":
+                        allowed = {"symbol", "category", "granularity", "limit"}
+                    elif parsed.path == "/api/fills":
+                        allowed = {"symbol", "category", "limit"}
+                    else:
+                        allowed = {"symbol", "category"}
                     if set(query) - allowed or any(len(value) != 1 for value in query.values()):
                         raise DashboardError(400, "Invalid query")
                     symbol = (query.get("symbol") or [None])[0]
@@ -875,6 +880,14 @@ def make_handler(store):
                     try:
                         if parsed.path == "/api/ticker":
                             payload = live_desk.ticker_payload(symbol, category)
+                            self._json(200 if payload.get("ok") else 503, payload)
+                        elif parsed.path == "/api/fills":
+                            limit_raw = (query.get("limit") or ["80"])[0]
+                            try:
+                                limit = int(limit_raw)
+                            except ValueError as exc:
+                                raise DashboardError(400, "Invalid limit") from exc
+                            payload = live_desk.fills_payload(symbol, category, limit)
                             self._json(200 if payload.get("ok") else 503, payload)
                         else:
                             granularity = (query.get("granularity") or ["15m"])[0]

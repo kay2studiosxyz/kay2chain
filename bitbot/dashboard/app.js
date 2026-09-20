@@ -18,6 +18,8 @@
     chart: null,
     series: null,
     lastCandlesKey: '',
+    bars: [],
+    fills: [],
   };
 
   const $ = (sel, root = document) => root.querySelector(sel);
@@ -461,7 +463,100 @@
     }
   }
 
-  function ensureChart() {
+  function snapFillToBar(timeSec, bars) {
+    if (!bars.length) return null;
+    let best = bars[0].time;
+    for (let i = 0; i < bars.length; i += 1) {
+      const t = bars[i].time;
+      if (t <= timeSec) best = t;
+      else break;
+    }
+    // Prefer nearest bar within one timeframe window
+    let nearest = best;
+    let bestDist = Math.abs(timeSec - best);
+    for (const b of bars) {
+      const d = Math.abs(timeSec - b.time);
+      if (d < bestDist) {
+        bestDist = d;
+        nearest = b.time;
+      }
+    }
+    return nearest;
+  }
+
+  function buildTradeMarkers(fills, bars) {
+    if (!fills.length || !bars.length) return [];
+    const markers = [];
+    const used = new Map(); // time -> count for slight stacking via text
+    for (const fill of fills) {
+      const rawT = Number(fill.time || Math.floor(Number(fill.ts_ms) / 1000));
+      if (!Number.isFinite(rawT)) continue;
+      const t = snapFillToBar(rawT, bars);
+      if (t == null) continue;
+      const side = String(fill.side || '').toLowerCase();
+      const isBuy = side === 'buy';
+      const isSell = side === 'sell';
+      if (!isBuy && !isSell) continue;
+      const n = (used.get(t) || 0) + 1;
+      used.set(t, n);
+      const px = fill.price != null ? fmtPx(fill.price) : '';
+      const qty = fill.qty != null ? fmt(fill.qty, 4) : '';
+      const label = isBuy ? 'BUY' : 'SELL';
+      const detail = [label, px, qty ? `×${qty}` : ''].filter(Boolean).join(' ');
+      markers.push({
+        time: t,
+        position: isBuy ? 'belowBar' : 'aboveBar',
+        color: isBuy ? '#6dffb0' : '#ff6b7a',
+        shape: 'circle',
+        text: n > 1 ? `${label}·${n}` : label,
+        size: 1.2,
+        id: fill.id || `${t}-${label}-${n}`,
+        _detail: detail,
+      });
+    }
+    markers.sort((a, b) => a.time - b.time || a.position.localeCompare(b.position));
+    return markers;
+  }
+
+  function paintTradeMarkers() {
+    if (!state.series) return;
+    const markers = buildTradeMarkers(state.fills, state.bars);
+    try {
+      state.series.setMarkers(markers);
+    } catch (err) {
+      console.warn('setMarkers failed', err);
+    }
+    const legend = $('#chart-bubbles');
+    if (legend) {
+      const buys = state.fills.filter((f) => f.side === 'buy').length;
+      const sells = state.fills.filter((f) => f.side === 'sell').length;
+      legend.hidden = !(buys || sells);
+      legend.innerHTML = `
+        <span class="bubble buy"><i></i> Buy ${buys}</span>
+        <span class="bubble sell"><i></i> Sell ${sells}</span>
+      `;
+    }
+  }
+
+  async function loadFills() {
+    try {
+      const { data } = await api(
+        `/api/fills?symbol=${encodeURIComponent(state.symbol)}&category=${encodeURIComponent(state.category)}&limit=100`,
+        { timeoutMs: 12000 },
+      );
+      if (!data || !data.ok) {
+        state.fills = [];
+        paintTradeMarkers();
+        return;
+      }
+      state.fills = data.fills || [];
+      paintTradeMarkers();
+    } catch {
+      /* keep prior markers */
+    }
+  }
+
+    function ensureChart() {
     const el = $('#tv-chart');
     if (!el || state.chart || typeof LightweightCharts === 'undefined') return;
     state.chart = LightweightCharts.createChart(el, {
@@ -512,6 +607,7 @@
         low: c.l,
         close: c.c,
       })).filter((b) => b.time && b.open != null);
+      state.bars = bars;
       state.series.setData(bars);
       if (force || state.lastCandlesKey !== key) {
         state.chart.timeScale().fitContent();
@@ -519,6 +615,9 @@
       }
       $('#chart-sym-label').textContent = state.symbol;
       $('#chart-foot').textContent = `${data.count} candles · ${data.granularity} · Bitget ${data.category}`;
+      // Buy/sell bubbles from recent Bitget fills (snap to bars)
+      paintTradeMarkers();
+      loadFills();
     } catch (err) {
       $('#chart-foot').textContent = String(err.message || err);
     }

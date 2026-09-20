@@ -37,6 +37,13 @@ Public Bitget ticker (proxied). `category` default `USDT-FUTURES`.
 { "ok": true, "symbol": "SOLUSDT", "category": "USDT-FUTURES", "last": 108.3, "mark": 108.3, "bid": …, "ask": …, "change24h": -3.0, "stale": false }
 ```
 
+
+### `GET /api/fills?symbol=&category=&limit=`
+Recent Bitget UTA fills for chart buy/sell bubbles. `limit` default 80 (max 200).
+```json
+{ "ok": true, "symbol": "SOLUSDT", "fills": [{"side":"buy","price":110.3,"qty":0.1,"time":1789853939,"ts_ms":1789853939666}], "count": 1 }
+```
+
 ### `GET /api/candles?symbol=&category=&granularity=&limit=`
 OHLCV from Bitget public candles. Granularity: `1m` `5m` `15m` `1H` `4H` (aliases `1h`/`4h` accepted).
 ```json

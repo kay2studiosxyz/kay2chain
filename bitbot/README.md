@@ -16,13 +16,14 @@ This folder mirrors the desk files changed for **live UTA portfolio streaming**.
 | `GET /api/positions` | Open positions with mark, uPnL, liq distance |
 | `GET /api/desk` | Combined summary |
 | `GET /api/desk/stream` | **SSE** (~1s) — `event: desk` with the same payload as `/api/desk` |
+| `GET /api/fills` | Recent Bitget fills for chart **buy/sell bubbles** |
 
 The desk UI opens `/api/desk/stream` via `EventSource` and falls back to REST polling every 3s if the stream drops. LIVE order placement stays locked unless `BITBOT_LIVE_OK` is explicitly unlocked on the NUC.
 
 ## Deployed on NUC (2026-09-20)
 
 - `bot/dashboard.py` — `/api/desk/stream` handler
-- `bot/live_desk.py` — version `desk-2.1.0`
+- `bot/live_desk.py` — version `desk-2.1.1`
 - `dashboard/app.js` — stream consumer + poll fallback
 - `dashboard/index.html` — “live stream” label
 - `docs/DESK_API.md` — contract
