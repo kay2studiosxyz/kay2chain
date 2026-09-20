@@ -117,70 +117,144 @@
 
       <!-- TRADE -->
       <section class="view" data-panel="trade" hidden>
-        <div class="trade-layout">
-          <form class="card trade-ticket" id="trade-form" autocomplete="off">
-            <div class="card-top">
-              <h2>Trade ticket</h2>
-              <span class="subtle-chip watch-chip"><i></i> SIMULATE DEFAULT</span>
+        <div class="trade-layout exchange">
+          <form class="card trade-ticket exchange-ticket" id="trade-form" autocomplete="off">
+            <div class="card-top ticket-head">
+              <div>
+                <h2>Perpetual</h2>
+                <p class="ticket-sub">USDT-M · Cross · Simulate</p>
+              </div>
+              <span class="subtle-chip watch-chip"><i></i> PAPER / WATCH</span>
             </div>
-            <label class="field">
-              <span>Symbol</span>
-              <select id="t-symbol" name="symbol">
-                <option value="SOLUSDT">SOLUSDT</option>
-                <option value="BTCUSDT">BTCUSDT</option>
-                <option value="ETHUSDT">ETHUSDT</option>
-              </select>
-            </label>
+
+            <div class="bal-strip" aria-label="Account balances">
+              <div>
+                <span>Available</span>
+                <strong id="t-avail-usdt">—</strong>
+                <em>USDT</em>
+              </div>
+              <div>
+                <span>Equity</span>
+                <strong id="t-equity">—</strong>
+              </div>
+              <div>
+                <span>Balance</span>
+                <strong id="t-balance">—</strong>
+              </div>
+              <div>
+                <span>Max open</span>
+                <strong id="t-max-notional">—</strong>
+              </div>
+            </div>
+
+            <div class="ticket-symbol-row">
+              <label class="field compact">
+                <span>Contract</span>
+                <select id="t-symbol" name="symbol">
+                  <option value="SOLUSDT">SOLUSDT</option>
+                  <option value="BTCUSDT">BTCUSDT</option>
+                  <option value="ETHUSDT">ETHUSDT</option>
+                </select>
+              </label>
+              <div class="mark-chip">
+                <span class="tiny-label">Mark</span>
+                <strong id="t-mark">—</strong>
+              </div>
+            </div>
             <input type="hidden" id="t-category" value="USDT-FUTURES">
-            <div class="side-toggle" role="group" aria-label="Side">
-              <button type="button" class="side-btn long active" data-side="long">Long</button>
-              <button type="button" class="side-btn short" data-side="short">Short</button>
+
+            <div class="side-toggle exchange-side" role="group" aria-label="Side">
+              <button type="button" class="side-btn long active" data-side="long">Buy / Long</button>
+              <button type="button" class="side-btn short" data-side="short">Sell / Short</button>
             </div>
+
             <div class="row-2">
-              <label class="field">
-                <span>Order type</span>
+              <label class="field compact">
+                <span>Type</span>
                 <select id="t-type">
                   <option value="market">Market</option>
                   <option value="limit">Limit</option>
                 </select>
               </label>
-              <label class="field" id="t-price-wrap" hidden>
+              <label class="field compact" id="t-price-wrap" hidden>
                 <span>Limit price</span>
                 <input id="t-price" type="number" step="any" inputmode="decimal" placeholder="0.00">
               </label>
+              <label class="field compact" id="t-margin-wrap">
+                <span>Margin</span>
+                <input id="t-margin-mode-display" type="text" value="Cross" readonly>
+              </label>
             </div>
-            <div class="size-mode" role="group" aria-label="Size mode">
-              <button type="button" class="size-mode-btn active" data-size-mode="coins">Coins</button>
-              <button type="button" class="size-mode-btn" data-size-mode="usdt">USDT notional</button>
+            <p class="field-hint" hidden>Margin mode: <strong id="t-margin-mode">crossed</strong></p>
+
+            <div class="slider-block">
+              <div class="slider-head">
+                <span>Leverage</span>
+                <strong><span id="t-lev-readout">5</span>×</strong>
+              </div>
+              <input id="t-leverage-range" class="ex-range lev" type="range" min="1" max="125" step="1" value="5" aria-label="Leverage slider">
+              <div class="slider-ticks" aria-hidden="true"><span>1×</span><span>25×</span><span>50×</span><span>100×</span><span>125×</span></div>
+              <input id="t-leverage" type="hidden" value="5">
             </div>
-            <label class="field">
-              <span id="t-size-label">Size (coins)</span>
-              <input id="t-size" type="number" step="any" min="0" inputmode="decimal" placeholder="0" required>
+
+            <div class="size-mode exchange-mode" role="group" aria-label="Size mode">
+              <button type="button" class="size-mode-btn" data-size-mode="coins">Coins</button>
+              <button type="button" class="size-mode-btn active" data-size-mode="usdt">USDT</button>
+            </div>
+
+            <label class="field compact">
+              <span id="t-size-label">Amount (USDT)</span>
+              <div class="size-input-row">
+                <input id="t-size" type="number" step="any" min="0" inputmode="decimal" placeholder="0.00" required>
+                <span class="size-suffix" id="t-size-suffix">USDT</span>
+              </div>
             </label>
-            <label class="field">
-              <span>Leverage</span>
-              <input id="t-leverage" type="number" min="1" max="125" step="1" value="5">
-            </label>
-            <p class="field-hint">Margin mode: <strong id="t-margin-mode">crossed</strong> (display)</p>
+
+            <div class="slider-block">
+              <div class="slider-head">
+                <span>% of available</span>
+                <strong><span id="t-pct-readout">0</span>%</strong>
+              </div>
+              <input id="t-pct-range" class="ex-range pct" type="range" min="0" max="100" step="1" value="0" aria-label="Size percent of available">
+              <div class="pct-chips" role="group" aria-label="Quick size">
+                <button type="button" data-pct="10">10%</button>
+                <button type="button" data-pct="25">25%</button>
+                <button type="button" data-pct="50">50%</button>
+                <button type="button" data-pct="75">75%</button>
+                <button type="button" data-pct="100">Max</button>
+              </div>
+            </div>
+
+            <div class="cost-strip" aria-live="polite">
+              <div><span>Cost / margin</span><strong id="t-cost">—</strong></div>
+              <div><span>Max notional</span><strong id="t-max-line">—</strong></div>
+              <div><span>Liq (est.)</span><strong id="t-liq-est">—</strong></div>
+            </div>
+
             <div class="row-2">
-              <label class="field">
-                <span>Take profit <em>(opt)</em></span>
+              <label class="field compact">
+                <span>Take profit <em>opt</em></span>
                 <input id="t-tp" type="number" step="any" inputmode="decimal" placeholder="—">
               </label>
-              <label class="field">
-                <span>Stop loss <em>(opt)</em></span>
+              <label class="field compact">
+                <span>Stop loss <em>opt</em></span>
                 <input id="t-sl" type="number" step="any" inputmode="decimal" placeholder="—">
               </label>
             </div>
-            <div class="ticket-actions">
-              <button type="submit" class="primary-button" id="btn-simulate">Simulate</button>
+
+            <div class="ticket-actions exchange-actions">
+              <button type="submit" class="primary-button side-action long" id="btn-simulate">Buy / Long</button>
               <button type="button" class="secondary-button" id="btn-live" disabled title="Needs Kane LIVE OK">LIVE · locked</button>
             </div>
             <p class="ticket-lock" id="ticket-lock">LIVE disabled until BITBOT_LIVE_OK. STOP ALL TRADING.</p>
           </form>
-          <section class="card trade-preview-card">
-            <div class="card-top"><h2>Preview</h2><span class="quiet-label">No order sent</span></div>
-            <div id="trade-preview" class="trade-preview empty">Fill the ticket and tap Simulate.</div>
+
+          <section class="card trade-preview-card exchange-preview">
+            <div class="card-top">
+              <h2>Order preview</h2>
+              <span class="quiet-label">Dry-run · no fill</span>
+            </div>
+            <div id="trade-preview" class="trade-preview empty">Adjust size or leverage — preview updates live.</div>
           </section>
         </div>
       </section>

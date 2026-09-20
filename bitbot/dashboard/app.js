@@ -13,13 +13,15 @@
     category: 'USDT-FUTURES',
     tf: '15m',
     side: 'long',
-    sizeMode: 'coins',
+    sizeMode: 'usdt',
     liveUnlocked: false,
     chart: null,
     series: null,
     lastCandlesKey: '',
     bars: [],
     fills: [],
+    lastMark: null,
+    previewTimer: null,
   };
 
   const $ = (sel, root = document) => root.querySelector(sel);
@@ -148,7 +150,7 @@
     const titles = {
       overview: ['Overview', 'Open UTA positions, equity, and mark prices.'],
       charts: ['Charts', 'Bitget candles · near-realtime mark.'],
-      trade: ['Trade', 'Simulate fills. LIVE stays locked until Kane unlocks.'],
+      trade: ['Trade', 'Exchange ticket · available USDT, leverage & size sliders.'],
     };
     const [t, d] = titles[name] || titles.overview;
     $('#page-title').textContent = t;
@@ -158,11 +160,50 @@
       ensureChart();
       loadCandles(true);
     }
+    if (name === 'trade') {
+      paintTradeBalances();
+      refreshTradeMark();
+      updateSideAction();
+    }
   }
 
   function hashView() {
     const h = (location.hash || '#overview').replace('#', '');
     return ['overview', 'charts', 'trade'].includes(h) ? h : 'overview';
+  }
+
+  function usdtAsset(acct) {
+    return ((acct && acct.assets) || []).find((a) => a.coin === 'USDT') || null;
+  }
+
+  function availableUsdt() {
+    const usdt = usdtAsset(state.account);
+    return usdt && usdt.available != null ? Number(usdt.available) : 0;
+  }
+
+  function paintTradeBalances() {
+    const acct = state.account;
+    const availEl = $('#t-avail-usdt');
+    if (!availEl) return;
+    if (!acct) {
+      availEl.textContent = '—';
+      if ($('#t-equity')) $('#t-equity').textContent = '—';
+      if ($('#t-balance')) $('#t-balance').textContent = '—';
+      if ($('#t-max-notional')) $('#t-max-notional').textContent = '—';
+      if ($('#t-max-line')) $('#t-max-line').textContent = '—';
+      return;
+    }
+    const usdt = usdtAsset(acct);
+    const avail = usdt && usdt.available != null ? Number(usdt.available) : null;
+    const bal = usdt && usdt.balance != null ? Number(usdt.balance) : null;
+    const lev = Number(($('#t-leverage') || {}).value) || 5;
+    availEl.textContent = avail != null ? fmt(avail) : '—';
+    if ($('#t-equity')) $('#t-equity').textContent = acct.equity != null ? `$${fmt(acct.equity)}` : '—';
+    if ($('#t-balance')) $('#t-balance').textContent = bal != null ? `$${fmt(bal)}` : '—';
+    const maxNotional = avail != null ? avail * lev : null;
+    if ($('#t-max-notional')) $('#t-max-notional').textContent = maxNotional != null ? `$${fmt(maxNotional)}` : '—';
+    if ($('#t-max-line')) $('#t-max-line').textContent = maxNotional != null ? `$${fmt(maxNotional)}` : '—';
+    updateCostStrip();
   }
 
   function renderAccount(acct) {
@@ -172,6 +213,7 @@
       $('#acct-upnl').textContent = '—';
       $('#acct-avail').textContent = '—';
       $('#acct-mmr').textContent = '—';
+      paintTradeBalances();
       return;
     }
     $('#acct-equity').textContent = acct.equity != null ? `$${fmt(acct.equity)}` : '—';
@@ -179,11 +221,12 @@
     const up = $('#acct-upnl');
     up.textContent = money(upnl);
     up.className = pnlClass(upnl);
-    const usdt = (acct.assets || []).find((a) => a.coin === 'USDT');
+    const usdt = usdtAsset(acct);
     $('#acct-avail').textContent = usdt && usdt.available != null ? `$${fmt(usdt.available)}` : '—';
     const mmr = acct.mmr != null ? fmt(acct.mmr, 2) : '—';
     const imr = acct.imr != null ? fmt(acct.imr, 2) : '—';
     $('#acct-mmr').textContent = `${mmr} / ${imr}`;
+    paintTradeBalances();
   }
 
   function positionCard(p) {
@@ -725,25 +768,177 @@
     }
   }
 
+  function updateSideAction() {
+    const btn = $('#btn-simulate');
+    if (!btn) return;
+    const long = state.side === 'long';
+    btn.textContent = long ? 'Buy / Long' : 'Sell / Short';
+    btn.classList.toggle('long', long);
+    btn.classList.toggle('short', !long);
+    const ticket = $('#trade-form');
+    if (ticket) ticket.dataset.side = state.side;
+  }
+
+  function updateCostStrip() {
+    const levEl = $('#t-leverage');
+    const lev = Number(levEl && levEl.value) || 1;
+    const avail = availableUsdt();
+    const sizeEl = $('#t-size');
+    const sizeVal = Number(sizeEl && sizeEl.value) || 0;
+    let margin = 0;
+    if (state.sizeMode === 'usdt') margin = lev > 0 ? sizeVal / lev : 0;
+    else {
+      const mark = state.lastMark || 0;
+      margin = lev > 0 ? (sizeVal * mark) / lev : 0;
+    }
+    const costEl = $('#t-cost');
+    if (costEl) costEl.textContent = margin > 0 ? `$${fmt(margin)}` : '—';
+    const mark = state.lastMark;
+    const liqEl = $('#t-liq-est');
+    if (liqEl && mark && lev > 1) {
+      const move = (1 / lev) * 0.85;
+      const liq = state.side === 'long' ? mark * (1 - move) : mark * (1 + move);
+      liqEl.textContent = fmtPx(liq);
+    } else if (liqEl) liqEl.textContent = '—';
+    const maxNotional = avail * lev;
+    if ($('#t-max-line')) $('#t-max-line').textContent = maxNotional > 0 ? `$${fmt(maxNotional)}` : '—';
+    if ($('#t-max-notional')) $('#t-max-notional').textContent = maxNotional > 0 ? `$${fmt(maxNotional)}` : '—';
+  }
+
+  function setSizeFromPercent(pct) {
+    const avail = availableUsdt();
+    const lev = Number($('#t-leverage').value) || 1;
+    const clamped = Math.max(0, Math.min(100, Number(pct) || 0));
+    $('#t-pct-range').value = String(clamped);
+    $('#t-pct-readout').textContent = String(Math.round(clamped));
+    if (state.sizeMode === 'usdt') {
+      const margin = avail * (clamped / 100);
+      const notional = margin * lev;
+      $('#t-size').value = notional > 0 ? String(Number(notional.toFixed(4))) : '';
+    } else {
+      const mark = state.lastMark || 0;
+      const margin = avail * (clamped / 100);
+      const notional = margin * lev;
+      const coins = mark > 0 ? notional / mark : 0;
+      $('#t-size').value = coins > 0 ? String(Number(coins.toFixed(6))) : '';
+    }
+    updateCostStrip();
+    queuePreview();
+  }
+
+  function syncPercentFromSize() {
+    const avail = availableUsdt();
+    const lev = Number($('#t-leverage').value) || 1;
+    const sizeVal = Number($('#t-size').value) || 0;
+    let margin = 0;
+    if (state.sizeMode === 'usdt') margin = lev > 0 ? sizeVal / lev : 0;
+    else {
+      const mark = state.lastMark || 0;
+      margin = lev > 0 ? (sizeVal * mark) / lev : 0;
+    }
+    const pct = avail > 0 ? Math.max(0, Math.min(100, (margin / avail) * 100)) : 0;
+    $('#t-pct-range').value = String(Math.round(pct));
+    $('#t-pct-readout').textContent = String(Math.round(pct));
+    updateCostStrip();
+  }
+
+  function queuePreview() {
+    if (state.previewTimer) clearTimeout(state.previewTimer);
+    state.previewTimer = setTimeout(() => {
+      const sizeVal = Number($('#t-size').value);
+      if (!sizeVal || sizeVal <= 0) return;
+      onSimulate({ preventDefault() {} });
+    }, 450);
+  }
+
+  async function refreshTradeMark() {
+    try {
+      const sym = ($('#t-symbol') && $('#t-symbol').value) || state.symbol;
+      const { data } = await api(`/api/ticker?symbol=${encodeURIComponent(sym)}&category=${encodeURIComponent(state.category)}`);
+      if (!data || !data.ok) return;
+      state.lastMark = data.mark || data.last;
+      if ($('#t-mark')) $('#t-mark').textContent = fmtPx(state.lastMark);
+      updateCostStrip();
+    } catch { /* ignore */ }
+  }
+
   function wireTrade() {
     $$('.side-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
         state.side = btn.dataset.side;
         $$('.side-btn').forEach((b) => b.classList.toggle('active', b === btn));
+        updateSideAction();
+        updateCostStrip();
+        queuePreview();
       });
     });
     $$('.size-mode-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
+        const prev = state.sizeMode;
         state.sizeMode = btn.dataset.sizeMode;
         $$('.size-mode-btn').forEach((b) => b.classList.toggle('active', b === btn));
-        $('#t-size-label').textContent = state.sizeMode === 'usdt' ? 'Notional (USDT)' : 'Size (coins)';
+        $('#t-size-label').textContent = state.sizeMode === 'usdt' ? 'Amount (USDT)' : 'Size (coins)';
+        if ($('#t-size-suffix')) {
+          $('#t-size-suffix').textContent = state.sizeMode === 'usdt'
+            ? 'USDT'
+            : ($('#t-symbol').value || 'COIN').replace('USDT', '');
+        }
+        const mark = state.lastMark || 0;
+        const val = Number($('#t-size').value) || 0;
+        if (val > 0 && mark > 0 && prev !== state.sizeMode) {
+          if (state.sizeMode === 'usdt') $('#t-size').value = String(Number((val * mark).toFixed(4)));
+          else $('#t-size').value = String(Number((val / mark).toFixed(6)));
+        }
+        syncPercentFromSize();
+        queuePreview();
       });
     });
     $('#t-type').addEventListener('change', () => {
       $('#t-price-wrap').hidden = $('#t-type').value !== 'limit';
+      queuePreview();
+    });
+    const levRange = $('#t-leverage-range');
+    const levHidden = $('#t-leverage');
+    if (levRange && levHidden) {
+      levRange.addEventListener('input', () => {
+        levHidden.value = levRange.value;
+        if ($('#t-lev-readout')) $('#t-lev-readout').textContent = levRange.value;
+        setSizeFromPercent($('#t-pct-range').value);
+      });
+    }
+    if ($('#t-pct-range')) {
+      $('#t-pct-range').addEventListener('input', () => setSizeFromPercent($('#t-pct-range').value));
+    }
+    $$('.pct-chips button').forEach((btn) => {
+      btn.addEventListener('click', () => setSizeFromPercent(btn.dataset.pct));
+    });
+    if ($('#t-size')) {
+      $('#t-size').addEventListener('input', () => {
+        syncPercentFromSize();
+        queuePreview();
+      });
+    }
+    if ($('#t-symbol')) {
+      $('#t-symbol').addEventListener('change', () => {
+        state.symbol = $('#t-symbol').value;
+        if ($('#t-size-suffix')) {
+          $('#t-size-suffix').textContent = state.sizeMode === 'usdt'
+            ? 'USDT'
+            : state.symbol.replace('USDT', '');
+        }
+        refreshTradeMark();
+        queuePreview();
+      });
+    }
+    ['t-tp', 't-sl', 't-price'].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('input', queuePreview);
     });
     $('#trade-form').addEventListener('submit', onSimulate);
     $('#btn-live').addEventListener('click', onLiveClick);
+    updateSideAction();
+    paintTradeBalances();
+    refreshTradeMark();
   }
 
   function wireNav() {
