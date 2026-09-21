@@ -950,15 +950,11 @@
 
   function snapFillToBar(timeSec, bars) {
     if (!bars.length) return null;
-    let best = bars[0].time;
-    for (let i = 0; i < bars.length; i += 1) {
-      const t = bars[i].time;
-      if (t <= timeSec) best = t;
-      else break;
-    }
-    // Prefer nearest bar within one timeframe window
-    let nearest = best;
-    let bestDist = Math.abs(timeSec - best);
+    const first = bars[0].time;
+    const last = bars[bars.length - 1].time;
+    if (timeSec < first || timeSec > last + 120) return null;
+    let nearest = bars[0].time;
+    let bestDist = Math.abs(timeSec - nearest);
     for (const b of bars) {
       const d = Math.abs(timeSec - b.time);
       if (d < bestDist) {
