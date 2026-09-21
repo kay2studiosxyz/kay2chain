@@ -455,8 +455,11 @@ body.live-ok .hl-lock { color: var(--hl-amber); background: #e8ca8c18; border-co
     padding: max(6px, env(safe-area-inset-top)) 10px 8px;
   }
   .hl-brand { gap: 8px; }
+  .hl-mascot .mascot-portrait { width: 28px; height: 28px; }
   .hl-wordmark, .hl-nav, .hl-pair-meta, .hl-lock span, .conn-label, #refresh,
   .hl-acct-cell:first-child, .hl-stat:not(.price):not(:nth-child(2)) { display: none !important; }
+  .symbol-switch button.pos-chip .chip-side { display: none; }
+  .symbol-switch button.pos-chip { padding: 4px 8px; }
   .hl-market { display: flex; flex-direction: column; gap: 6px; overflow: visible; }
   .hl-pair { width: 100%; }
   .hl-stats { width: 100%; justify-content: space-between; }
@@ -489,7 +492,7 @@ body.live-ok .hl-lock { color: var(--hl-amber); background: #e8ca8c18; border-co
     position: relative;
   }
   .tv-chart { flex: 1; min-height: 0; }
-  .chart-bubbles, .chart-foot, #chart-sym-label { display: none; }
+  .chart-bubbles, .chart-foot, #chart-sym-label, #chart-chg { display: none; }
   .hl-chart-bar { padding: 4px 8px; }
 
   .sheet-grab {
@@ -501,7 +504,12 @@ body.live-ok .hl-lock { color: var(--hl-amber); background: #e8ca8c18; border-co
     padding: 10px 0 4px;
   }
   .sheet-grab i {
-    width: 40px; height: 4px; border-radius: 99px; background: #ffffff33;
+    width: 44px; height: 5px; border-radius: 99px; background: #ffffff55;
+  }
+  .open-pos-strip {
+    grid-template-columns: 1fr 1fr;
+    gap: 4px 8px;
+    padding: 6px 8px;
   }
   .m-scrim {
     display: block;
@@ -523,7 +531,7 @@ body.live-ok .hl-lock { color: var(--hl-amber); background: #e8ca8c18; border-co
     bottom: 0;
     z-index: 30;
     width: 100%;
-    max-height: min(84dvh, 720px);
+    max-height: min(62dvh, 560px);
     min-height: 0;
     border: 0;
     border-radius: 18px 18px 0 0;
@@ -540,6 +548,8 @@ body.live-ok .hl-lock { color: var(--hl-amber); background: #e8ca8c18; border-co
     transform: translateY(0);
     pointer-events: auto;
   }
+  .hl-trade[data-mobile-pane="ticket"] .hl-ticket { max-height: min(68dvh, 620px); }
+  .hl-trade[data-mobile-pane="dock"] .hl-dock { max-height: min(72dvh, 640px); }
   .hl-book, .hl-tape, .hl-dock-panel { flex: 1; min-height: 0; overflow: auto; }
   .hl-ticket { background: #10161b; }
   .hl-ticket .trade-ticket {
@@ -582,10 +592,12 @@ body.live-ok .hl-lock { color: var(--hl-amber); background: #e8ca8c18; border-co
     background: #151c21;
     color: var(--hl-text);
     border-radius: 12px;
-    font: 700 13px inherit;
+    font: 700 12px inherit;
     text-decoration: none;
     display: grid;
     place-items: center;
+    white-space: nowrap;
+    letter-spacing: 0;
   }
   .m-action-bar button.active, .m-action-bar a.active {
     border-color: #35e5e555;

@@ -1005,7 +1005,7 @@
 
   function paintTradeMarkers() {
     if (!state.series) return;
-    const markers = buildTradeMarkers(state.fills, state.bars);
+    const markers = isPhone() ? [] : buildTradeMarkers(state.fills, state.bars);
     try {
       state.series.setMarkers(markers);
     } catch (err) {
