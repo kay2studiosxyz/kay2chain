@@ -9,7 +9,7 @@ Mode default is **PAPER_WATCH**. LIVE order placement stays locked unless
 
 ### `GET /api/health`
 ```json
-{ "ok": true, "service": "bitbot-dashboard", "mode": "PAPER_WATCH", "version": "desk-2.3.0", "ts": "…", "live_trading": false, "live_lock": "…" }
+{ "ok": true, "service": "bitbot-dashboard", "mode": "PAPER_WATCH", "version": "desk-2.4.0", "ts": "…", "live_trading": false, "live_lock": "…" }
 ```
 
 ### `GET /api/desk`
@@ -65,7 +65,7 @@ Public Bitget tape (`/api/v3/market/fills`). Distinct from authenticated `GET /a
 ```
 
 ### `GET /api/bot` / `POST /api/bot`
-In-app USDT-M futures paper scalper. Scans 1m + 5m for entries/exits. Paper fills only.
+In-app USDT-M futures paper scalper. Scans SOL/HYPE/BTC/ETH on 1m + 5m for entries/exits. Paper fills only.
 
 `GET` returns `{ running, profile, market, leverage_policy, scan, metrics, open, live_signals, closed, events }`.
 Profiles: `safe` (<10×), `risk` (10–75×), `aggressive` (50–150×). Below 10× is safe. Cap 150×.

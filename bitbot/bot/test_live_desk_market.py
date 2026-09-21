@@ -104,5 +104,68 @@ class TradesTests(unittest.TestCase):
         self.assertEqual(payload["trades"][0]["side"], "buy")
 
 
+class PositionsBookTests(unittest.TestCase):
+    def test_positions_payload_keeps_hype_and_sol_longs(self):
+        snap = {
+            "ok": True,
+            "ts": "t",
+            "stale": False,
+            "live": {
+                "account": {"equity": 1000.0, "unrealised_pnl": 12.5},
+                "positions": [
+                    {
+                        "symbol": "SOLUSDT",
+                        "side": "long",
+                        "size": 2.0,
+                        "entry": 100.0,
+                        "mark": 110.0,
+                        "unrealised_pnl": 20.0,
+                        "liq": 80.0,
+                        "leverage": 5.0,
+                        "position_balance": 40.0,
+                    },
+                    {
+                        "symbol": "HYPEUSDT",
+                        "side": "long",
+                        "size": 8.0,
+                        "entry": 90.0,
+                        "mark": 93.0,
+                        "unrealised_pnl": 24.0,
+                        "liq": 70.0,
+                        "leverage": 8.0,
+                        "position_balance": 90.0,
+                    },
+                ],
+                "category_errors": [],
+                "fetched_at": "t",
+            },
+        }
+        with patch.object(live_desk, "get_snapshot", return_value=snap):
+            payload = live_desk.positions_payload()
+        symbols = [row["symbol"] for row in payload["positions"]]
+        self.assertEqual(symbols, ["SOLUSDT", "HYPEUSDT"])
+        self.assertEqual(payload["count"], 2)
+        hype = payload["positions"][1]
+        self.assertEqual(hype["side"], "long")
+        self.assertIsNotNone(hype["distance_to_liq_pct"])
+        self.assertGreater(hype["distance_to_liq_pct"], 0)
+
+    def test_hype_ticker_symbol_normalises(self):
+        sample = [{
+            "symbol": "HYPEUSDT",
+            "lastPrice": "93.053",
+            "markPrice": "93.053",
+            "bid1Price": "93.074",
+            "ask1Price": "93.078",
+            "price24hPcnt": "-0.00023",
+            "fundingRate": "0.00005",
+        }]
+        with patch.object(live_desk, "_public_get", return_value=sample):
+            payload = live_desk.ticker_payload("hypeusdt", "USDT-FUTURES")
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["symbol"], "HYPEUSDT")
+        self.assertAlmostEqual(payload["mark"], 93.053)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -23,7 +23,7 @@ def _candles(move_bps: float, volume_ratio: float = 1.4) -> list[dict]:
 class DeskBotTests(unittest.TestCase):
     def setUp(self):
         desk_bot.reset_for_tests()
-        self.marks = {"SOLUSDT": 100.0, "BTCUSDT": 100.0, "ETHUSDT": 100.0}
+        self.marks = {"SOLUSDT": 100.0, "HYPEUSDT": 100.0, "BTCUSDT": 100.0, "ETHUSDT": 100.0}
         self.candle_move = 20.0
         self.five_move = 20.0
         self.positions = []
@@ -186,6 +186,41 @@ class DeskBotTests(unittest.TestCase):
         source = inspect.getsource(desk_bot)
         self.assertNotIn("live_desk.trade_place", source)
         self.assertNotIn("close_position(", source)
+
+    def test_scans_hype_with_sol_btc_eth(self):
+        self.assertEqual(desk_bot.SYMBOLS, ("SOLUSDT", "HYPEUSDT", "BTCUSDT", "ETHUSDT"))
+        desk_bot.tick(time.time())
+        scanned = [row["symbol"] for row in desk_bot.status()["scan"]]
+        self.assertEqual(scanned, ["SOLUSDT", "HYPEUSDT", "BTCUSDT", "ETHUSDT"])
+
+    def test_live_signals_cover_hype_and_sol_longs(self):
+        desk_bot.command({"action": "stop"})
+        self.positions = [
+            {
+                "symbol": "SOLUSDT",
+                "side": "long",
+                "leverage": 6,
+                "unrealised_pnl": 0.50,
+                "pnl_pct": 4.0,
+                "mark": 110,
+                "entry": 108,
+            },
+            {
+                "symbol": "HYPEUSDT",
+                "side": "long",
+                "leverage": 8,
+                "unrealised_pnl": -0.22,
+                "pnl_pct": -1.5,
+                "mark": 93,
+                "entry": 95,
+            },
+        ]
+        desk_bot.tick(time.time())
+        signals = desk_bot.status()["live_signals"]
+        by_sym = {row["symbol"]: row["signal"] for row in signals}
+        self.assertEqual(set(by_sym), {"SOLUSDT", "HYPEUSDT"})
+        self.assertEqual(by_sym["HYPEUSDT"], "PROTECT")
+        self.assertFalse(any(row.get("executable") for row in signals))
 
     def test_fees_make_tiny_green_negative_until_be(self):
         net = desk_bot._net_after_fees("long", 100.0, 100.10, 1.0)

@@ -8,16 +8,16 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Bitbot">
   <meta name="theme-color" content="#07090c">
-  <meta name="description" content="Bitbot terminal — Bitget UTA perps with a Hyperliquid-style desk. LIVE locked by default.">
-  <title>Bitbot · Terminal</title>
+  <meta name="description" content="Bitbot — custom Bitget UTA perps desk. LIVE locked by default.">
+  <title>Bitbot · Perps</title>
   <link rel="icon" type="image/svg+xml" href="./favicon.svg">
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png">
-  <link rel="stylesheet" href="./styles.css?v=desk-2.3.1">
-  <link rel="stylesheet" href="./premium.css?v=desk-2.3.1">
-  <link rel="stylesheet" href="./terminal.css?v=desk-2.3.1">
+  <link rel="stylesheet" href="./styles.css?v=desk-2.4.0">
+  <link rel="stylesheet" href="./premium.css?v=desk-2.4.0">
+  <link rel="stylesheet" href="./terminal.css?v=desk-2.4.0">
   <script src="./lightweight-charts.js" defer></script>
-  <script src="./app.js?v=desk-2.3.1" defer></script>
+  <script src="./app.js?v=desk-2.4.0" defer></script>
 </head>
 <body class="hl-shell">
   <a class="skip" href="#main">Skip to desk</a>
@@ -183,11 +183,14 @@
             </div>
             <span id="t-balance" hidden>—</span>
 
+            <div id="open-pos-strip" class="open-pos-strip" hidden></div>
+
             <div class="ticket-symbol-row">
               <label class="field compact">
                 <span>Contract</span>
                 <select id="t-symbol" name="symbol">
                   <option value="SOLUSDT">SOLUSDT</option>
+                  <option value="HYPEUSDT">HYPEUSDT</option>
                   <option value="BTCUSDT">BTCUSDT</option>
                   <option value="ETHUSDT">ETHUSDT</option>
                 </select>
@@ -351,7 +354,7 @@
             <div class="card-top">
               <div>
                 <h2>Bitbot AI scalper</h2>
-                <p class="quiet-label" id="bot-note">USDT-M futures · 1m/5m scan · below 10× is safe</p>
+                <p class="quiet-label" id="bot-note">USDT-M · SOL/HYPE/BTC/ETH · 1m/5m · below 10× is safe</p>
               </div>
               <span class="status-badge" id="bot-status">—</span>
             </div>

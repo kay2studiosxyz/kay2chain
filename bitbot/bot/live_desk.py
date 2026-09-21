@@ -21,7 +21,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-DESK_VERSION = "desk-2.3.0"
+DESK_VERSION = "desk-2.4.0"
 DESK_MODE = "PAPER_WATCH"
 CACHE_TTL_SECONDS = 3.0
 TICKER_TTL_SECONDS = 1.5
@@ -576,7 +576,7 @@ def _normalize_granularity(granularity: str | None) -> str:
 
 def _public_get(path: str, params: dict[str, Any]) -> Any:
     url = f"{BITGET_REST}{path}?{urlencode(params)}"
-    req = Request(url, headers={"User-Agent": "bitbot-desk/2.3", "Accept": "application/json"})
+    req = Request(url, headers={"User-Agent": "bitbot-desk/2.4", "Accept": "application/json"})
     try:
         with urlopen(req, timeout=6) as resp:
             body = resp.read().decode("utf-8", errors="replace")
