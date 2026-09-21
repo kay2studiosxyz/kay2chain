@@ -9,7 +9,7 @@ Mode default is **PAPER_WATCH**. LIVE order placement stays locked unless
 
 ### `GET /api/health`
 ```json
-{ "ok": true, "service": "bitbot-dashboard", "mode": "PAPER_WATCH", "version": "desk-2.2.1", "ts": "…", "live_trading": false, "live_lock": "…" }
+{ "ok": true, "service": "bitbot-dashboard", "mode": "PAPER_WATCH", "version": "desk-2.3.0", "ts": "…", "live_trading": false, "live_lock": "…" }
 ```
 
 ### `GET /api/desk`
@@ -36,7 +36,7 @@ Open UTA positions with mark, unrealised PnL, liq, break-even, margin, pnl_pct, 
 ### `GET /api/ticker?symbol=&category=`
 Public Bitget ticker (proxied). `category` default `USDT-FUTURES`.
 ```json
-{ "ok": true, "symbol": "SOLUSDT", "category": "USDT-FUTURES", "last": 108.3, "mark": 108.3, "bid": …, "ask": …, "change24h": -3.0, "stale": false }
+{ "ok": true, "symbol": "SOLUSDT", "category": "USDT-FUTURES", "last": 108.3, "mark": 108.3, "bid": …, "ask": …, "change24h": -3.0, "funding": 0.0001, "stale": false }
 ```
 
 
@@ -50,6 +50,18 @@ Recent Bitget UTA fills for chart buy/sell bubbles. `limit` default 80 (max 200)
 OHLCV from Bitget public candles. Granularity: `1m` `5m` `15m` `1H` `4H` (aliases `1h`/`4h` accepted).
 ```json
 { "ok": true, "symbol": "SOLUSDT", "granularity": "15m", "candles": [{"t": 0, "o": 0, "h": 0, "l": 0, "c": 0, "v": 0}], "count": 200 }
+```
+
+### `GET /api/orderbook?symbol=&category=&limit=`
+Public Bitget depth (`/api/v3/market/orderbook`). `limit` default 20 (max 50). Cached ~0.8s.
+```json
+{ "ok": true, "symbol": "SOLUSDT", "bids": [{"price": 108.2, "size": 1.5, "cum_size": 1.5, "cum_notional": 162.3}], "asks": [{"price": 108.4, "size": 2, "cum_size": 2, "cum_notional": 216.8}], "best_bid": 108.2, "best_ask": 108.4, "spread": 0.2, "spread_bps": 18.5, "mid": 108.3 }
+```
+
+### `GET /api/trades?symbol=&category=&limit=`
+Public Bitget tape (`/api/v3/market/fills`). Distinct from authenticated `GET /api/fills`. `limit` default 40 (max 100).
+```json
+{ "ok": true, "symbol": "SOLUSDT", "trades": [{"side":"buy","price":108.3,"qty":0.4,"ts_ms":1730969017964,"time":1730969017}], "count": 1 }
 ```
 
 ### `GET /api/bot` / `POST /api/bot`
@@ -77,6 +89,8 @@ Default: locked. STOP ALL TRADING.
 ## Caching
 - Positions/account snapshot ~3s
 - Tickers ~1.5s
+- Order book ~0.8s
+- Public trades ~1.5s
 - Candles ~8s
 On Bitget failure, last good snapshot may return with `stale: true`.
 

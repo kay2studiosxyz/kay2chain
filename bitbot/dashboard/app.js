@@ -4,9 +4,11 @@
   const POLL_POS_MS = 3000;
   const POLL_TICK_MS = 2000;
   const POLL_CANDLE_MS = 15000;
+  const POLL_BOOK_MS = 900;
+  const POLL_TAPE_MS = 1500;
 
   const state = {
-    view: 'portfolio',
+    view: 'trade',
     positions: [],
     account: null,
     symbol: 'SOLUSDT',
@@ -145,6 +147,7 @@
 
   function setView(name) {
     if (name === 'overview') name = 'portfolio';
+    if (name === 'charts') name = 'trade';
     state.view = name;
     $$('.nav-link').forEach((a) => a.classList.toggle('active', a.dataset.view === name));
     $$('.view').forEach((p) => {
@@ -152,18 +155,13 @@
       p.hidden = !on;
     });
     const titles = {
-      portfolio: ['Portfolio', 'Balances, margin, AI scalper, and open UTA positions.'],
-      charts: ['Markets', 'Bitget candles · near-realtime mark.'],
-      trade: ['Trade', 'Exchange ticket · available USDT, leverage & size sliders.'],
+      portfolio: ['Portfolio', 'Balances, margin, and live UTA positions.'],
+      trade: ['Trade', 'Bitget perps terminal · chart, book, ticket.'],
     };
-    const [t, d] = titles[name] || titles.portfolio;
-    if ($('#page-title')) $('#page-title').textContent = t;
-    if ($('#page-description')) $('#page-description').textContent = d;
+    const [t, d] = titles[name] || titles.trade;
+    if ($('#page-title') && name === 'portfolio') $('#page-title').textContent = t;
+    if ($('#page-description') && name === 'portfolio') $('#page-description').textContent = d;
     if ($('#crumb')) $('#crumb').textContent = t;
-    if (name === 'charts') {
-      ensureChart();
-      loadCandles(true);
-    }
     if (name === 'portfolio') {
       ensureEquityChart();
     }
@@ -171,13 +169,19 @@
       paintTradeBalances();
       refreshTradeMark();
       updateSideAction();
+      ensureChart();
+      loadCandles(true);
+      loadTicker();
+      loadOrderbook();
+      loadTape();
     }
   }
 
   function hashView() {
-    let h = (location.hash || '#portfolio').replace('#', '');
+    let h = (location.hash || '#trade').replace('#', '');
     if (h === 'overview') h = 'portfolio';
-    return ['portfolio', 'charts', 'trade'].includes(h) ? h : 'portfolio';
+    if (h === 'charts') h = 'trade';
+    return ['portfolio', 'trade'].includes(h) ? h : 'trade';
   }
 
   function usdtAsset(acct) {
@@ -505,18 +509,13 @@
   }
 
   function goChart(sym) {
-    state.symbol = sym;
-    location.hash = 'charts';
-    setView('charts');
-    buildSymbolSwitch();
-    loadCandles(true);
-    loadTicker();
+    selectSymbol(sym);
+    location.hash = 'trade';
+    setView('trade');
   }
 
   function goTrade(sym) {
-    ensureSymbolOption(sym);
-    const sel = $('#t-symbol');
-    if (sel) sel.value = sym;
+    selectSymbol(sym);
     location.hash = 'trade';
     setView('trade');
   }
@@ -532,6 +531,7 @@
       <td>${fmtPx(p.entry)}</td>
       <td class="mark">${fmtPx(p.mark)}</td>
       <td>${fmtPx(p.liq)}</td>
+      <td>${p.distance_to_liq_pct != null ? fmt(p.distance_to_liq_pct, 2) + '%' : '—'}</td>
       <td>${p.margin != null ? '$' + fmt(p.margin) : '—'}</td>
       <td class="${pnlClass(upnl)}">${money(upnl)}</td>
       <td class="${pnlClass(roe)}">${fmtPct(roe)}</td>
@@ -560,7 +560,7 @@
     if ($('#pos-count')) $('#pos-count').textContent = `${state.positions.length} open`;
     if (!state.positions.length) {
       if (root) root.innerHTML = '<div class="empty-pos card">No open UTA positions.</div>';
-      if (body) body.innerHTML = '<tr><td colspan="10" class="empty-cell">No open positions.</td></tr>';
+      if (body) body.innerHTML = '<tr><td colspan="11" class="empty-cell">No open positions.</td></tr>';
       syncTradeSymbols();
       return;
     }
@@ -573,6 +573,7 @@
 
   function ensureSymbolOption(sym) {
     const sel = $('#t-symbol');
+    if (!sel || !sym) return;
     if (![...sel.options].some((o) => o.value === sym)) {
       const opt = document.createElement('option');
       opt.value = sym;
@@ -581,10 +582,28 @@
     }
   }
 
+  function selectSymbol(sym) {
+    if (!sym) return;
+    state.symbol = sym;
+    ensureSymbolOption(sym);
+    const sel = $('#t-symbol');
+    if (sel) sel.value = sym;
+    buildSymbolSwitch();
+    loadCandles(true);
+    loadTicker();
+    loadOrderbook();
+    loadTape();
+    refreshTradeMark();
+  }
+
   function syncTradeSymbols() {
     const symbols = new Set(BASE);
     state.positions.forEach((p) => p.symbol && symbols.add(p.symbol));
     const sel = $('#t-symbol');
+    if (!sel) {
+      buildSymbolSwitch();
+      return;
+    }
     const current = sel.value;
     sel.innerHTML = '';
     [...symbols].forEach((s) => {
@@ -594,7 +613,9 @@
       sel.appendChild(opt);
     });
     if (symbols.has(current)) sel.value = current;
+    else if (symbols.has(state.symbol)) sel.value = state.symbol;
     else if (state.positions[0]) sel.value = state.positions[0].symbol;
+    if (sel.value) state.symbol = sel.value;
     buildSymbolSwitch();
   }
 
@@ -608,12 +629,7 @@
       `<button type="button" role="tab" data-sym="${s}" class="${s === state.symbol ? 'active' : ''}">${s}</button>`
     ).join('');
     root.querySelectorAll('button').forEach((btn) => {
-      btn.addEventListener('click', () => {
-        state.symbol = btn.dataset.sym;
-        buildSymbolSwitch();
-        loadCandles(true);
-        loadTicker();
-      });
+      btn.addEventListener('click', () => selectSymbol(btn.dataset.sym));
     });
   }
 
@@ -624,6 +640,7 @@
     const side = $('#sidebar-live');
     const liveBtn = $('#btn-live');
     const lockMsg = $('#ticket-lock');
+    document.body.classList.toggle('live-ok', !!unlocked);
     if (unlocked) {
       if (badge) badge.textContent = 'LIVE UNLOCKED';
       if (chip) chip.innerHTML = '<i></i> LIVE OK';
@@ -889,10 +906,11 @@
     function ensureChart() {
     const el = $('#tv-chart');
     if (!el || state.chart || typeof LightweightCharts === 'undefined') return;
+    const height = Math.max(240, el.clientHeight || Math.min(520, window.innerHeight * 0.48));
     state.chart = LightweightCharts.createChart(el, {
       layout: {
-        background: { color: '#0f1519' },
-        textColor: '#9aafa3',
+        background: { color: '#0b0f13' },
+        textColor: '#8b98a4',
       },
       grid: {
         vertLines: { color: 'rgba(255,255,255,0.04)' },
@@ -902,25 +920,28 @@
       timeScale: { borderColor: 'rgba(255,255,255,0.08)', timeVisible: true, secondsVisible: false },
       crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
       width: el.clientWidth,
-      height: Math.max(360, Math.min(520, window.innerHeight * 0.55)),
+      height,
     });
     state.series = state.chart.addCandlestickSeries({
-      upColor: '#6dffb0',
+      upColor: '#3dd68c',
       downColor: '#ff6b7a',
-      borderUpColor: '#6dffb0',
+      borderUpColor: '#3dd68c',
       borderDownColor: '#ff6b7a',
-      wickUpColor: '#6dffb0',
+      wickUpColor: '#3dd68c',
       wickDownColor: '#ff6b7a',
     });
     const ro = new ResizeObserver(() => {
       if (!state.chart) return;
-      state.chart.applyOptions({ width: el.clientWidth });
+      state.chart.applyOptions({
+        width: el.clientWidth,
+        height: Math.max(220, el.clientHeight || height),
+      });
     });
     ro.observe(el);
   }
 
   async function loadCandles(force) {
-    if (state.view !== 'charts' && !force) return;
+    if (state.view !== 'trade' && !force) return;
     ensureChart();
     if (!state.series) return;
     const key = `${state.symbol}|${state.tf}`;
@@ -957,10 +978,35 @@
     try {
       const { data } = await api(`/api/ticker?symbol=${encodeURIComponent(state.symbol)}&category=${encodeURIComponent(state.category)}`);
       if (!data || !data.ok) return;
-      $('#chart-last').textContent = fmtPx(data.mark || data.last);
+      const last = data.mark || data.last;
+      const lastText = fmtPx(last);
+      if ($('#chart-last')) $('#chart-last').textContent = lastText;
+      if ($('#mh-last')) $('#mh-last').textContent = fmtPx(data.last || last);
+      if ($('#mh-mark')) $('#mh-mark').textContent = fmtPx(data.mark || last);
+      if ($('#mh-bid')) $('#mh-bid').textContent = fmtPx(data.bid);
+      if ($('#mh-ask')) $('#mh-ask').textContent = fmtPx(data.ask);
+      if ($('#mh-high')) $('#mh-high').textContent = fmtPx(data.high24h);
+      if ($('#mh-low')) $('#mh-low').textContent = fmtPx(data.low24h);
+      if ($('#mh-vol')) {
+        const vol = data.quote_volume != null ? data.quote_volume : data.base_volume;
+        $('#mh-vol').textContent = vol != null ? fmt(vol, vol >= 1000 ? 0 : 2) : '—';
+      }
+      if ($('#mh-funding')) {
+        $('#mh-funding').textContent = data.funding != null ? `${fmt(Number(data.funding) * 100, 4)}%` : '—';
+      }
+      if ($('#mh-oi')) $('#mh-oi').textContent = data.open_interest != null ? fmt(data.open_interest, 2) : '—';
       const chg = $('#chart-chg');
-      chg.textContent = fmtPct(data.change24h);
-      chg.className = `chg ${pnlClass(data.change24h)}`;
+      if (chg) {
+        chg.textContent = fmtPct(data.change24h);
+        chg.className = `chg ${pnlClass(data.change24h)}`;
+      }
+      const mhChg = $('#mh-chg');
+      if (mhChg) {
+        mhChg.textContent = fmtPct(data.change24h);
+        mhChg.className = `chg ${pnlClass(data.change24h)}`;
+      }
+      if (last != null) state.lastMark = last;
+      if ($('#t-mark') && state.lastMark != null) $('#t-mark').textContent = fmtPx(state.lastMark);
       if (state.series && (data.mark || data.last) != null) {
         try {
           state.series.applyOptions({
@@ -969,6 +1015,114 @@
         } catch { /* ignore */ }
       }
     } catch { /* ignore */ }
+  }
+
+  function fmtCompact(n) {
+    if (n == null || Number.isNaN(Number(n))) return '—';
+    const x = Math.abs(Number(n));
+    if (x >= 1e6) return `${fmt(n / 1e6, 2)}M`;
+    if (x >= 1e3) return `${fmt(n / 1e3, 2)}K`;
+    return fmt(n, x >= 1 ? 3 : 4);
+  }
+
+  function bookRow(level, side, maxSize) {
+    const size = Number(level.size) || 0;
+    const pct = maxSize > 0 ? Math.max(4, Math.min(100, (size / maxSize) * 100)) : 0;
+    return `<button type="button" class="book-row ${side}" data-book-price="${level.price}" data-book-side="${side}">
+      <i class="depth" style="width:${pct}%"></i>
+      <span class="px">${fmtPx(level.price)}</span>
+      <span>${fmtCompact(level.size)}</span>
+      <span>${fmtCompact(level.cum_size)}</span>
+    </button>`;
+  }
+
+  function applyBookPrice(price, side) {
+    const type = $('#t-type');
+    const wrap = $('#t-price-wrap');
+    const input = $('#t-price');
+    if (!type || !input) return;
+    type.value = 'limit';
+    if (wrap) wrap.hidden = false;
+    input.value = String(price);
+    if (side === 'ask') {
+      state.side = 'long';
+      $$('.side-btn').forEach((b) => b.classList.toggle('active', b.dataset.side === 'long'));
+    } else if (side === 'bid') {
+      state.side = 'short';
+      $$('.side-btn').forEach((b) => b.classList.toggle('active', b.dataset.side === 'short'));
+    }
+    updateSideAction();
+    updateCostStrip();
+    queuePreview();
+  }
+
+  function renderBook(data) {
+    const asksEl = $('#book-asks');
+    const bidsEl = $('#book-bids');
+    if (!asksEl || !bidsEl || !data) return;
+    const asks = (data.asks || []).slice(0, 14);
+    const bids = (data.bids || []).slice(0, 14);
+    const maxSize = Math.max(
+      0,
+      ...asks.map((r) => Number(r.size) || 0),
+      ...bids.map((r) => Number(r.size) || 0),
+    );
+    // Best ask sits on the spread; farthest ask at the top.
+    asksEl.innerHTML = asks.slice().reverse().map((row) => bookRow(row, 'ask', maxSize)).join('');
+    bidsEl.innerHTML = bids.map((row) => bookRow(row, 'bid', maxSize)).join('');
+    if ($('#book-mid')) $('#book-mid').textContent = fmtPx(data.mid || data.best_ask || data.best_bid);
+    if ($('#book-spread-val')) {
+      const bps = data.spread_bps != null ? `${fmt(data.spread_bps, 2)} bps` : fmtPx(data.spread);
+      $('#book-spread-val').textContent = bps;
+    }
+    [asksEl, bidsEl].forEach((root) => {
+      root.querySelectorAll('[data-book-price]').forEach((btn) => {
+        btn.addEventListener('click', () => applyBookPrice(btn.dataset.bookPrice, btn.dataset.bookSide));
+      });
+    });
+  }
+
+  async function loadOrderbook() {
+    if (state.view !== 'trade') return;
+    try {
+      const { data } = await api(
+        `/api/orderbook?symbol=${encodeURIComponent(state.symbol)}&category=${encodeURIComponent(state.category)}&limit=20`,
+        { timeoutMs: 8000 },
+      );
+      if (data && data.ok) renderBook(data);
+    } catch { /* keep last book */ }
+  }
+
+  function renderTape(trades) {
+    const root = $('#tape-body');
+    if (!root) return;
+    const rows = (trades || []).slice(0, 40);
+    if (!rows.length) {
+      root.innerHTML = '<li class="empty">No public prints yet.</li>';
+      return;
+    }
+    root.innerHTML = rows.map((t) => {
+      const when = t.ts_ms
+        ? new Date(t.ts_ms).toLocaleTimeString('en-GB', { hour12: false, timeZone: 'Europe/London' })
+        : '';
+      return `<li class="${t.side || ''}">
+        <span>${(t.side || '').toUpperCase()}</span>
+        <strong>${fmtPx(t.price)}</strong>
+        <em>${fmtCompact(t.qty)}</em>
+        <time>${when}</time>
+      </li>`;
+    }).join('');
+  }
+
+  async function loadTape() {
+    if (state.view !== 'trade') return;
+    try {
+      const { data } = await api(
+        `/api/trades?symbol=${encodeURIComponent(state.symbol)}&category=${encodeURIComponent(state.category)}&limit=40`,
+        { timeoutMs: 8000 },
+      );
+      if (data && data.ok) renderTape(data.trades);
+    } catch { /* keep last tape */ }
   }
 
   function ticketBody() {
@@ -1212,13 +1366,12 @@
     }
     if ($('#t-symbol')) {
       $('#t-symbol').addEventListener('change', () => {
-        state.symbol = $('#t-symbol').value;
+        selectSymbol($('#t-symbol').value);
         if ($('#t-size-suffix')) {
           $('#t-size-suffix').textContent = state.sizeMode === 'usdt'
             ? 'USDT'
             : state.symbol.replace('USDT', '');
         }
-        refreshTradeMark();
         queuePreview();
       });
     }
@@ -1260,17 +1413,63 @@
     window.addEventListener('hashchange', () => setView(hashView()));
     $('#refresh').addEventListener('click', () => {
       refreshDesk();
-      if (state.view === 'charts') {
+      if (state.view === 'trade') {
         loadCandles(true);
         loadTicker();
+        loadOrderbook();
+        loadTape();
       }
     });
-    $('#tf-switch').addEventListener('click', (ev) => {
-      const btn = ev.target.closest('button[data-tf]');
-      if (!btn) return;
-      state.tf = btn.dataset.tf;
-      $$('#tf-switch button').forEach((b) => b.classList.toggle('active', b === btn));
-      loadCandles(true);
+    const tf = $('#tf-switch');
+    if (tf) {
+      tf.addEventListener('click', (ev) => {
+        const btn = ev.target.closest('button[data-tf]');
+        if (!btn) return;
+        state.tf = btn.dataset.tf;
+        $$('#tf-switch button').forEach((b) => b.classList.toggle('active', b === btn));
+        loadCandles(true);
+      });
+    }
+    $$('[data-depth]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        $$('[data-depth]').forEach((b) => b.classList.toggle('active', b === btn));
+        const which = btn.dataset.depth;
+        $$('[data-depth-panel]').forEach((p) => {
+          p.hidden = p.dataset.depthPanel !== which;
+        });
+      });
+    });
+    $$('[data-dock]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        $$('[data-dock]').forEach((b) => b.classList.toggle('active', b === btn));
+        const which = btn.dataset.dock;
+        $$('[data-dock-panel]').forEach((p) => {
+          p.hidden = p.dataset.dockPanel !== which;
+        });
+      });
+    });
+    $$('button[data-pane]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const pane = btn.dataset.pane;
+        if (!pane) return;
+        const trade = $('.hl-trade');
+        if (trade) trade.dataset.mobilePane = pane;
+        $$('.hl-mobile-panes button').forEach((b) => b.classList.toggle('active', b.dataset.pane === pane));
+        if (pane === 'chart') {
+          ensureChart();
+          if (state.chart) {
+            const el = $('#tv-chart');
+            state.chart.applyOptions({
+              width: el.clientWidth,
+              height: Math.max(220, el.clientHeight),
+            });
+          }
+        }
+        if (pane === 'dock' && location.hash !== '#trade') {
+          location.hash = 'trade';
+          setView('trade');
+        }
+      });
     });
   }
 
@@ -1501,11 +1700,19 @@
       if (!document.hidden && !deskStreamHealthy) startDeskStream();
     });
     setInterval(() => {
-      if (state.view === 'charts') loadTicker();
+      if (state.view === 'trade') loadTicker();
     }, POLL_TICK_MS);
     setInterval(() => {
-      if (state.view === 'charts') loadCandles(false);
+      if (state.view === 'trade') loadCandles(false);
     }, POLL_CANDLE_MS);
+    setInterval(() => {
+      if (state.view === 'trade') loadOrderbook();
+    }, POLL_BOOK_MS);
+    setInterval(() => {
+      if (state.view === 'trade') loadTape();
+    }, POLL_TAPE_MS);
+    const trade = $('.hl-trade');
+    if (trade && !trade.dataset.mobilePane) trade.dataset.mobilePane = 'chart';
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);

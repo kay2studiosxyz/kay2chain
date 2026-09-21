@@ -28,6 +28,7 @@ ASSETS = {"/": ("index.html", "text/html; charset=utf-8"),
           "/styles.css": ("styles.css", "text/css; charset=utf-8"),
           "/calendar.css": ("calendar.css", "text/css; charset=utf-8"),
           "/premium.css": ("premium.css", "text/css; charset=utf-8"),
+          "/terminal.css": ("terminal.css", "text/css; charset=utf-8"),
           "/bitbot-art.jpg": ("bitbot-art.jpg", "image/jpeg"),
           "/experience.js": ("experience.js", "text/javascript; charset=utf-8"),
           "/live.js": ("live.js", "text/javascript; charset=utf-8"),
@@ -820,7 +821,7 @@ def make_handler(store):
                 self.end_headers()
                 deadline = time.monotonic() + 60
                 self.wfile.write(b"retry: 1500\n\n")
-                self.wfile.write(b"event: hello\ndata: {\"service\":\"bitbot-desk\",\"version\":\"desk-2.2.1\"}\n\n")
+                self.wfile.write(b"event: hello\ndata: {\"service\":\"bitbot-desk\",\"version\":\"desk-2.3.0\"}\n\n")
                 self.wfile.flush()
                 while time.monotonic() < deadline:
                     self.wfile.write(b"event: desk\ndata: " + payload + b"\n\n")
@@ -865,12 +866,18 @@ def make_handler(store):
                         except Exception:
                             paper = None
                         self._json(200, live_desk.desk_summary(paper))
-                elif parsed.path in ("/api/ticker", "/api/candles", "/api/fills"):
+                elif parsed.path in (
+                    "/api/ticker",
+                    "/api/candles",
+                    "/api/fills",
+                    "/api/orderbook",
+                    "/api/trades",
+                ):
                     from bot import live_desk
                     query = parse_qs(parsed.query, keep_blank_values=True, max_num_fields=8)
                     if parsed.path == "/api/candles":
                         allowed = {"symbol", "category", "granularity", "limit"}
-                    elif parsed.path == "/api/fills":
+                    elif parsed.path in ("/api/fills", "/api/orderbook", "/api/trades"):
                         allowed = {"symbol", "category", "limit"}
                     else:
                         allowed = {"symbol", "category"}
@@ -891,6 +898,22 @@ def make_handler(store):
                             except ValueError as exc:
                                 raise DashboardError(400, "Invalid limit") from exc
                             payload = live_desk.fills_payload(symbol, category, limit)
+                            self._json(200 if payload.get("ok") else 503, payload)
+                        elif parsed.path == "/api/orderbook":
+                            limit_raw = (query.get("limit") or ["20"])[0]
+                            try:
+                                limit = int(limit_raw)
+                            except ValueError as exc:
+                                raise DashboardError(400, "Invalid limit") from exc
+                            payload = live_desk.orderbook_payload(symbol, category, limit)
+                            self._json(200 if payload.get("ok") else 503, payload)
+                        elif parsed.path == "/api/trades":
+                            limit_raw = (query.get("limit") or ["40"])[0]
+                            try:
+                                limit = int(limit_raw)
+                            except ValueError as exc:
+                                raise DashboardError(400, "Invalid limit") from exc
+                            payload = live_desk.trades_payload(symbol, category, limit)
                             self._json(200 if payload.get("ok") else 503, payload)
                         else:
                             granularity = (query.get("granularity") or ["15m"])[0]
