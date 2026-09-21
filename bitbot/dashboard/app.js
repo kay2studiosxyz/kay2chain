@@ -167,10 +167,12 @@
     if (name === 'portfolio') {
       ensureEquityChart();
     }
+    if (name === 'portfolio' && isPhone()) closeSheet();
     if (name === 'trade') {
       paintTradeBalances();
       refreshTradeMark();
       updateSideAction();
+      paintActionBar();
       ensureChart();
       loadCandles(true);
       loadTicker();
@@ -544,12 +546,14 @@
     selectSymbol(sym);
     location.hash = 'trade';
     setView('trade');
+    if (isPhone()) closeSheet();
   }
 
   function goTrade(sym) {
     selectSymbol(sym);
     location.hash = 'trade';
     setView('trade');
+    if (isPhone()) openTicket(state.side);
   }
 
   function positionRow(p) {
@@ -589,8 +593,7 @@
     state.positions = list || [];
     const root = $('#positions-hero');
     const body = $('#positions-body');
-    if ($('#nav-pos')) $('#nav-pos').textContent = String(state.positions.length || 0);
-    if ($('#pos-count')) $('#pos-count').textContent = `${state.positions.length} open`;
+    paintPosCount();
     if (!state.positions.length) {
       if (root) root.innerHTML = '<div class="empty-pos card">No open UTA positions.</div>';
       if (body) body.innerHTML = '<tr><td colspan="11" class="empty-cell">No open positions.</td></tr>';
@@ -707,8 +710,9 @@
 
   function paintOpenPosStrip() {
     const el = $('#open-pos-strip');
-    if (!el) return;
     const pos = currentPosition();
+    paintMobilePosCard();
+    if (!el) return;
     if (!pos) {
       el.hidden = true;
       el.innerHTML = '';
@@ -1362,6 +1366,7 @@
     btn.classList.toggle('short', !long);
     const ticket = $('#trade-form');
     if (ticket) ticket.dataset.side = state.side;
+    paintActionBar();
   }
 
   function updateCostStrip() {
@@ -1545,6 +1550,159 @@
     });
   }
 
+  function isPhone() {
+    return window.matchMedia('(max-width: 900px)').matches;
+  }
+
+  function mobilePane() {
+    const trade = $('.hl-trade');
+    return (trade && trade.dataset.mobilePane) || 'chart';
+  }
+
+  function resizeChartSoon() {
+    requestAnimationFrame(() => {
+      if (!state.chart) return;
+      const el = $('#tv-chart');
+      if (!el) return;
+      state.chart.applyOptions({
+        width: el.clientWidth,
+        height: Math.max(220, el.clientHeight),
+      });
+    });
+  }
+
+  function paintPosCount() {
+    const n = state.positions.length || 0;
+    if ($('#m-pos-n')) $('#m-pos-n').textContent = String(n);
+    if ($('#nav-pos')) $('#nav-pos').textContent = String(n);
+    if ($('#pos-count')) $('#pos-count').textContent = `${n} open`;
+  }
+
+  function paintMobilePosCard() {
+    const card = $('#m-pos-card');
+    if (!card) return;
+    const pos = currentPosition() || state.positions[0] || null;
+    if (!pos) {
+      card.hidden = true;
+      card.innerHTML = '';
+      return;
+    }
+    const side = (pos.side || '').toLowerCase();
+    const more = state.positions.length > 1 ? `<em>+${state.positions.length - 1}</em>` : '';
+    card.hidden = false;
+    card.innerHTML = `
+      <span><strong>${pairLabel(pos.symbol)}</strong><i class="${side}">${side}</i>${pos.leverage != null ? `${fmt(pos.leverage, 0)}×` : ''}${more}</span>
+      <strong class="${pnlClass(pos.unrealised_pnl)}">${money(pos.unrealised_pnl)}</strong>`;
+  }
+
+  function paintActionBar() {
+    const pane = mobilePane();
+    const ticketOpen = pane === 'ticket';
+    $$('.m-action-bar [data-pane]').forEach((b) => {
+      b.classList.toggle('active', b.dataset.pane === pane);
+    });
+    $$('.m-action-bar [data-ticket-side]').forEach((b) => {
+      b.classList.toggle('active', ticketOpen && b.dataset.ticketSide === state.side);
+    });
+    $$('.hl-mobile-panes button').forEach((b) => {
+      b.classList.toggle('active', b.dataset.pane === pane);
+    });
+  }
+
+  function setMobilePane(pane) {
+    const trade = $('.hl-trade');
+    if (!trade) return;
+    const next = pane || 'chart';
+    trade.dataset.mobilePane = next;
+    const open = isPhone() && next !== 'chart';
+    document.body.classList.toggle('sheet-open', open);
+    const scrim = $('#m-scrim');
+    if (scrim) scrim.hidden = !open;
+    paintActionBar();
+    if (next === 'chart' || next === 'book') resizeChartSoon();
+  }
+
+  function closeSheet() {
+    setMobilePane('chart');
+  }
+
+  function setTicketSide(side) {
+    if (side !== 'long' && side !== 'short') return;
+    state.side = side;
+    $$('.side-btn').forEach((b) => b.classList.toggle('active', b.dataset.side === side));
+    updateSideAction();
+    updateCostStrip();
+    queuePreview();
+  }
+
+  function openTicket(side) {
+    if (side) setTicketSide(side);
+    if (state.view !== 'trade') {
+      location.hash = 'trade';
+      setView('trade');
+    }
+    if (!isPhone()) return;
+    setMobilePane('ticket');
+    const form = $('#trade-form');
+    if (form) form.scrollTop = 0;
+  }
+
+  function openSheet(pane) {
+    if (state.view !== 'trade') {
+      location.hash = 'trade';
+      setView('trade');
+    }
+    if (!isPhone()) return;
+    if (pane === 'ticket') {
+      openTicket();
+      return;
+    }
+    setMobilePane(pane || 'chart');
+  }
+
+  function wireMobile() {
+    $$('[data-ticket-side]').forEach((btn) => {
+      btn.addEventListener('click', () => openTicket(btn.dataset.ticketSide));
+    });
+    $$('[data-close-sheet]').forEach((el) => {
+      el.addEventListener('click', closeSheet);
+    });
+    const card = $('#m-pos-card');
+    if (card) {
+      card.addEventListener('click', () => {
+        const pos = currentPosition() || state.positions[0];
+        if (pos && pos.symbol) selectSymbol(pos.symbol);
+        openSheet('dock');
+      });
+    }
+    document.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Escape' && isPhone() && mobilePane() !== 'chart') {
+        ev.preventDefault();
+        closeSheet();
+      }
+    });
+    window.addEventListener('resize', () => {
+      if (!isPhone()) {
+        document.body.classList.remove('sheet-open');
+        const scrim = $('#m-scrim');
+        if (scrim) scrim.hidden = true;
+        const trade = $('.hl-trade');
+        if (trade) trade.dataset.mobilePane = 'chart';
+        paintActionBar();
+      }
+    });
+    $$('.sheet-grab').forEach((grab) => {
+      let startY = 0;
+      grab.addEventListener('touchstart', (ev) => {
+        if (ev.touches[0]) startY = ev.touches[0].clientY;
+      }, { passive: true });
+      grab.addEventListener('touchend', (ev) => {
+        const y = ev.changedTouches && ev.changedTouches[0] && ev.changedTouches[0].clientY;
+        if (y != null && y - startY > 40) closeSheet();
+      });
+    });
+  }
+
   function wireNav() {
     $$('.nav-link').forEach((a) => {
       a.addEventListener('click', (ev) => {
@@ -1596,23 +1754,17 @@
       btn.addEventListener('click', () => {
         const pane = btn.dataset.pane;
         if (!pane) return;
-        const trade = $('.hl-trade');
-        if (trade) trade.dataset.mobilePane = pane;
-        $$('.hl-mobile-panes button').forEach((b) => b.classList.toggle('active', b.dataset.pane === pane));
+        if (isPhone() && pane === mobilePane() && pane !== 'chart') {
+          closeSheet();
+          return;
+        }
         if (pane === 'chart') {
+          closeSheet();
           ensureChart();
-          if (state.chart) {
-            const el = $('#tv-chart');
-            state.chart.applyOptions({
-              width: el.clientWidth,
-              height: Math.max(220, el.clientHeight),
-            });
-          }
+          resizeChartSoon();
+          return;
         }
-        if (pane === 'dock' && location.hash !== '#trade') {
-          location.hash = 'trade';
-          setView('trade');
-        }
+        openSheet(pane);
       });
     });
   }
@@ -1824,6 +1976,7 @@
     loadEquityTicks();
     wireArt();
     wireNav();
+    wireMobile();
     wireTrade();
     buildSymbolSwitch();
     setView(hashView());

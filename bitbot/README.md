@@ -1,4 +1,4 @@
-# Bitbot · custom Bitget perps desk (desk 2.4)
+# Bitbot · custom Bitget perps desk (desk 2.5)
 
 Production app for **https://bitbot.kay2.dev** runs on the ASUS NUC (`kay2nuc-1` / `100.112.164.103`) under PM2:
 
@@ -26,6 +26,8 @@ This folder mirrors the desk files for the **Bitget-backed perps app**. Venue st
 The desk UI opens `/api/desk/stream` via `EventSource` and falls back to REST polling every 3s if the stream drops. LIVE order placement stays locked unless `BITBOT_LIVE_OK` is explicitly unlocked on the NUC. Place still does not call Bitget while locked (403) or even when unlocked on this build (501).
 
 Watchlist markets: **SOLUSDT**, **HYPEUSDT**, **BTCUSDT**, **ETHUSDT**, plus any other open UTA contract.
+
+Phone (≤900px) is a chart-first desk: full-height candles, a floating position chip, and a thumb-zone **Buy / Sell** bar that opens the ticket as a bottom sheet. LIVE stay locked.
 
 ## Deployed on NUC
 
