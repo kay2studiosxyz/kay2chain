@@ -13,9 +13,9 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
-BOT_VERSION = "bot-1.1.0"
+BOT_VERSION = "bot-1.2.0"
 MARKET = "USDT-FUTURES"
-SYMBOLS = ("SOLUSDT", "BTCUSDT", "ETHUSDT")
+SYMBOLS = ("SOLUSDT", "HYPEUSDT", "BTCUSDT", "ETHUSDT")
 TAKER_BPS = 6.0
 ROUND_TRIP_BPS = TAKER_BPS * 2
 STARTING_EQUITY = 100.0

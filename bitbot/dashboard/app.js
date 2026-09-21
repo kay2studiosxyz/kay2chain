@@ -1,6 +1,6 @@
 'use strict';
 (() => {
-  const BASE = ['SOLUSDT', 'BTCUSDT', 'ETHUSDT'];
+  const BASE = ['SOLUSDT', 'HYPEUSDT', 'BTCUSDT', 'ETHUSDT'];
   const POLL_POS_MS = 3000;
   const POLL_TICK_MS = 2000;
   const POLL_CANDLE_MS = 15000;
@@ -19,6 +19,7 @@
     liveUnlocked: false,
     chart: null,
     series: null,
+    posLines: [],
     lastCandlesKey: '',
     bars: [],
     fills: [],
@@ -27,6 +28,7 @@
     equityChart: null,
     equitySeries: null,
     equityTicks: [],
+    switcherSig: '',
   };
 
   const $ = (sel, root = document) => root.querySelector(sel);
@@ -156,7 +158,7 @@
     });
     const titles = {
       portfolio: ['Portfolio', 'Balances, margin, and live UTA positions.'],
-      trade: ['Trade', 'Bitget perps terminal · chart, book, ticket.'],
+      trade: ['Trade', 'Custom Bitget perps desk · SOL, HYPE, and the rest of the book.'],
     };
     const [t, d] = titles[name] || titles.trade;
     if ($('#page-title') && name === 'portfolio') $('#page-title').textContent = t;
@@ -475,14 +477,44 @@
     paintTradeBalances();
   }
 
+  function pairLabel(sym) {
+    return String(sym || '').replace(/USDT$/i, '').replace(/USDC$/i, '') || sym;
+  }
+
+  function currentPosition(sym) {
+    const want = sym || state.symbol;
+    return state.positions.find((p) => p && p.symbol === want) || null;
+  }
+
+  function watchlistSymbols() {
+    const seen = new Set();
+    const ordered = [];
+    state.positions.forEach((p) => {
+      if (p && p.symbol && !seen.has(p.symbol)) {
+        seen.add(p.symbol);
+        ordered.push(p.symbol);
+      }
+    });
+    BASE.forEach((s) => {
+      if (!seen.has(s)) {
+        seen.add(s);
+        ordered.push(s);
+      }
+    });
+    if (state.symbol && !seen.has(state.symbol)) ordered.unshift(state.symbol);
+    return ordered;
+  }
+
   function positionCard(p) {
     const side = (p.side || '').toLowerCase();
     const upnl = p.unrealised_pnl;
     const pct = p.pnl_pct;
-    return `<article class="pos-card ${side}">
+    const on = p.symbol === state.symbol ? ' active' : '';
+    return `<article class="pos-card ${side}${on}">
       <header>
         <div class="pos-sym">
-          <strong>${p.symbol || '—'}</strong>
+          <strong>${pairLabel(p.symbol) || '—'}</strong>
+          <span class="quiet-label">${p.symbol || ''}</span>
           <span class="side-pill ${side}">${side || '—'}</span>
           <span class="lev">${p.leverage != null ? `${fmt(p.leverage, 0)}×` : '—'}</span>
         </div>
@@ -524,8 +556,9 @@
     const side = (p.side || '').toLowerCase();
     const upnl = p.unrealised_pnl;
     const roe = p.pnl_pct;
-    return `<tr class="pos-row ${side}">
-      <td class="contract"><strong>${p.symbol || '—'}</strong><span>${p.leverage != null ? fmt(p.leverage, 0) + '×' : ''} ${p.margin_mode || ''}</span></td>
+    const on = p.symbol === state.symbol ? ' active' : '';
+    return `<tr class="pos-row ${side}${on}" data-chart-sym="${p.symbol || ''}">
+      <td class="contract"><strong>${pairLabel(p.symbol) || '—'}</strong><span>${p.symbol || ''} · ${p.leverage != null ? fmt(p.leverage, 0) + '×' : ''} ${p.margin_mode || ''}</span></td>
       <td><span class="side-pill ${side}">${side || '—'}</span></td>
       <td>${fmt(p.size, 4)}</td>
       <td>${fmtPx(p.entry)}</td>
@@ -562,6 +595,8 @@
       if (root) root.innerHTML = '<div class="empty-pos card">No open UTA positions.</div>';
       if (body) body.innerHTML = '<tr><td colspan="11" class="empty-cell">No open positions.</td></tr>';
       syncTradeSymbols();
+      paintOpenPosStrip();
+      paintPositionLines();
       return;
     }
     if (body) body.innerHTML = state.positions.map(positionRow).join('');
@@ -569,6 +604,8 @@
     wirePosActions(body);
     wirePosActions(root);
     syncTradeSymbols();
+    paintOpenPosStrip();
+    paintPositionLines();
   }
 
   function ensureSymbolOption(sym) {
@@ -588,7 +625,15 @@
     ensureSymbolOption(sym);
     const sel = $('#t-symbol');
     if (sel) sel.value = sym;
+    const pos = currentPosition(sym);
+    if (pos && (pos.side === 'long' || pos.side === 'short')) {
+      state.side = pos.side;
+      $$('.side-btn').forEach((b) => b.classList.toggle('active', b.dataset.side === pos.side));
+      updateSideAction();
+    }
     buildSymbolSwitch();
+    paintOpenPosStrip();
+    paintPositionLines();
     loadCandles(true);
     loadTicker();
     loadOrderbook();
@@ -597,8 +642,7 @@
   }
 
   function syncTradeSymbols() {
-    const symbols = new Set(BASE);
-    state.positions.forEach((p) => p.symbol && symbols.add(p.symbol));
+    const symbols = watchlistSymbols();
     const sel = $('#t-symbol');
     if (!sel) {
       buildSymbolSwitch();
@@ -606,30 +650,124 @@
     }
     const current = sel.value;
     sel.innerHTML = '';
-    [...symbols].forEach((s) => {
+    symbols.forEach((s) => {
       const opt = document.createElement('option');
       opt.value = s;
       opt.textContent = s;
       sel.appendChild(opt);
     });
-    if (symbols.has(current)) sel.value = current;
-    else if (symbols.has(state.symbol)) sel.value = state.symbol;
+    if (symbols.includes(current)) sel.value = current;
+    else if (symbols.includes(state.symbol)) sel.value = state.symbol;
     else if (state.positions[0]) sel.value = state.positions[0].symbol;
     if (sel.value) state.symbol = sel.value;
     buildSymbolSwitch();
   }
 
+  function symbolChip(sym) {
+    const pos = currentPosition(sym);
+    const active = sym === state.symbol ? 'active' : '';
+    const label = pairLabel(sym);
+    if (!pos) {
+      return `<button type="button" role="tab" data-sym="${sym}" class="${active}">${label}</button>`;
+    }
+    const side = (pos.side || '').toLowerCase();
+    return `<button type="button" role="tab" data-sym="${sym}" class="pos-chip ${side} ${active}">
+      <span class="chip-pair">${label}</span>
+      <span class="chip-side">${side}</span>
+      <strong class="${pnlClass(pos.unrealised_pnl)}">${money(pos.unrealised_pnl)}</strong>
+    </button>`;
+  }
+
+  function switcherSignature(symbols) {
+    return symbols.map((s) => {
+      const p = currentPosition(s);
+      return [
+        s,
+        s === state.symbol ? '1' : '0',
+        p && p.side,
+        p && Number(p.unrealised_pnl).toFixed(2),
+        p && p.leverage,
+      ].join(':');
+    }).join('|');
+  }
+
   function buildSymbolSwitch() {
     const root = $('#symbol-switch');
     if (!root) return;
-    const symbols = new Set(BASE);
-    state.positions.forEach((p) => p.symbol && symbols.add(p.symbol));
-    if (!symbols.has(state.symbol)) state.symbol = [...symbols][0] || 'SOLUSDT';
-    root.innerHTML = [...symbols].map((s) =>
-      `<button type="button" role="tab" data-sym="${s}" class="${s === state.symbol ? 'active' : ''}">${s}</button>`
-    ).join('');
+    const symbols = watchlistSymbols();
+    if (!symbols.includes(state.symbol)) state.symbol = symbols[0] || 'SOLUSDT';
+    const sig = switcherSignature(symbols);
+    if (sig === state.switcherSig && root.childElementCount) return;
+    state.switcherSig = sig;
+    root.innerHTML = symbols.map(symbolChip).join('');
     root.querySelectorAll('button').forEach((btn) => {
       btn.addEventListener('click', () => selectSymbol(btn.dataset.sym));
+    });
+  }
+
+  function paintOpenPosStrip() {
+    const el = $('#open-pos-strip');
+    if (!el) return;
+    const pos = currentPosition();
+    if (!pos) {
+      el.hidden = true;
+      el.innerHTML = '';
+      return;
+    }
+    const side = (pos.side || '').toLowerCase();
+    el.hidden = false;
+    el.className = `open-pos-strip ${side}`;
+    el.innerHTML = `
+      <div class="ops-head">
+        <span class="side-pill ${side}">${side}</span>
+        <strong>${pairLabel(pos.symbol)}</strong>
+        <em>${pos.leverage != null ? `${fmt(pos.leverage, 0)}×` : ''}</em>
+      </div>
+      <div><span>Size</span><strong>${fmt(pos.size, 4)}</strong></div>
+      <div><span>Entry</span><strong>${fmtPx(pos.entry)}</strong></div>
+      <div><span>uPnL</span><strong class="${pnlClass(pos.unrealised_pnl)}">${money(pos.unrealised_pnl)}</strong></div>
+      <div><span>To liq</span><strong>${pos.distance_to_liq_pct != null ? `${fmt(pos.distance_to_liq_pct, 2)}%` : '—'}</strong></div>`;
+  }
+
+  function lineStyle(kind) {
+    const styles = (typeof LightweightCharts !== 'undefined' && LightweightCharts.LineStyle) || {};
+    if (kind === 'liq') return styles.Solid != null ? styles.Solid : 0;
+    return styles.Dashed != null ? styles.Dashed : 2;
+  }
+
+  function clearPosLines() {
+    if (!state.series) {
+      state.posLines = [];
+      return;
+    }
+    (state.posLines || []).forEach((line) => {
+      try { state.series.removePriceLine(line); } catch { /* ignore */ }
+    });
+    state.posLines = [];
+  }
+
+  function paintPositionLines() {
+    if (!state.series) return;
+    clearPosLines();
+    const pos = currentPosition();
+    if (!pos) return;
+    const specs = [
+      { price: pos.entry, color: '#35e5e5', title: 'Entry', kind: 'entry' },
+      { price: pos.break_even, color: '#e8ca8c', title: 'BE', kind: 'be' },
+      { price: pos.liq, color: '#ff6b7a', title: 'Liq', kind: 'liq' },
+    ];
+    specs.forEach((spec) => {
+      if (spec.price == null || !Number.isFinite(Number(spec.price))) return;
+      try {
+        state.posLines.push(state.series.createPriceLine({
+          price: Number(spec.price),
+          color: spec.color,
+          lineWidth: 1,
+          lineStyle: lineStyle(spec.kind),
+          axisLabelVisible: true,
+          title: spec.title,
+        }));
+      } catch { /* ignore */ }
     });
   }
 
@@ -812,15 +950,11 @@
 
   function snapFillToBar(timeSec, bars) {
     if (!bars.length) return null;
-    let best = bars[0].time;
-    for (let i = 0; i < bars.length; i += 1) {
-      const t = bars[i].time;
-      if (t <= timeSec) best = t;
-      else break;
-    }
-    // Prefer nearest bar within one timeframe window
-    let nearest = best;
-    let bestDist = Math.abs(timeSec - best);
+    const first = bars[0].time;
+    const last = bars[bars.length - 1].time;
+    if (timeSec < first || timeSec > last + 120) return null;
+    let nearest = bars[0].time;
+    let bestDist = Math.abs(timeSec - nearest);
     for (const b of bars) {
       const d = Math.abs(timeSec - b.time);
       if (d < bestDist) {
@@ -855,8 +989,8 @@
         position: isBuy ? 'belowBar' : 'aboveBar',
         color: isBuy ? '#6dffb0' : '#ff6b7a',
         shape: 'circle',
-        text: n > 1 ? `${label}·${n}` : label,
-        size: 1.2,
+        text: '',
+        size: 0.7,
         id: fill.id || `${t}-${label}-${n}`,
         _detail: detail,
       });
@@ -930,14 +1064,17 @@
       wickUpColor: '#3dd68c',
       wickDownColor: '#ff6b7a',
     });
-    const ro = new ResizeObserver(() => {
+    const resize = () => {
       if (!state.chart) return;
       state.chart.applyOptions({
         width: el.clientWidth,
         height: Math.max(220, el.clientHeight || height),
       });
-    });
+    };
+    const ro = new ResizeObserver(resize);
     ro.observe(el);
+    window.addEventListener('orientationchange', () => setTimeout(resize, 250));
+    window.addEventListener('resize', resize);
   }
 
   async function loadCandles(force) {
@@ -966,8 +1103,8 @@
       }
       $('#chart-sym-label').textContent = state.symbol;
       $('#chart-foot').textContent = `${data.count} candles · ${data.granularity} · Bitget ${data.category}`;
-      // Buy/sell bubbles from recent Bitget fills (snap to bars)
       paintTradeMarkers();
+      paintPositionLines();
       loadFills();
     } catch (err) {
       $('#chart-foot').textContent = String(err.message || err);

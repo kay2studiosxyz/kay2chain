@@ -1,4 +1,4 @@
-# Bitbot · Hyperliquid-style Bitget terminal (desk 2.3)
+# Bitbot · custom Bitget perps desk (desk 2.4)
 
 Production app for **https://bitbot.kay2.dev** runs on the ASUS NUC (`kay2nuc-1` / `100.112.164.103`) under PM2:
 
@@ -6,7 +6,7 @@ Production app for **https://bitbot.kay2.dev** runs on the ASUS NUC (`kay2nuc-1`
 - `bitbot-dashboard` — desk UI + API on `127.0.0.1:8871`
 - Cloudflare tunnel `agent-desk` → `bitbot.kay2.dev` (Access gated)
 
-This folder mirrors the desk files for the **Bitget-backed terminal**. Venue stays Bitget UTA. The UI is a custom Hyperliquid-style trade desk (chart, book, ticket, positions) with a better mobile/PWA layout, always-visible LIVE lock, liq distance, and a docked paper scalper.
+This folder mirrors the desk files for the **Bitget-backed perps app**. Venue stays Bitget UTA. The UI is a custom Hyperliquid-style trade desk built around the live book — open longs (SOL, HYPE, anything else on UTA) sit in the symbol switcher with uPnL, chart entry/liq lines, and the ticket. LIVE lock stays on unless Kane unlocks.
 
 ## Market + portfolio
 
@@ -21,9 +21,11 @@ This folder mirrors the desk files for the **Bitget-backed terminal**. Venue sta
 | `GET /api/orderbook` | Public Bitget depth for the terminal book |
 | `GET /api/trades` | Public Bitget tape |
 | `GET /api/fills` | Account fills for chart **buy/sell bubbles** |
-| `GET/POST /api/bot` | USDT-M futures paper scalper — 1m/5m entries/exits, 10–150× (below 10× is safe) |
+| `GET/POST /api/bot` | USDT-M futures paper scalper — SOL/HYPE/BTC/ETH 1m/5m, 10–150× (below 10× is safe) |
 
 The desk UI opens `/api/desk/stream` via `EventSource` and falls back to REST polling every 3s if the stream drops. LIVE order placement stays locked unless `BITBOT_LIVE_OK` is explicitly unlocked on the NUC. Place still does not call Bitget while locked (403) or even when unlocked on this build (501).
+
+Watchlist markets: **SOLUSDT**, **HYPEUSDT**, **BTCUSDT**, **ETHUSDT**, plus any other open UTA contract.
 
 ## Deployed on NUC
 
