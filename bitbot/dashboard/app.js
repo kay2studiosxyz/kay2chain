@@ -1643,8 +1643,8 @@
     }
     if (!isPhone()) return;
     setMobilePane('ticket');
-    const form = $('#trade-form');
-    if (form) form.scrollTop = 0;
+    const scroller = $('.ticket-scroll') || $('#trade-form');
+    if (scroller) scroller.scrollTop = 0;
   }
 
   function openSheet(pane) {
