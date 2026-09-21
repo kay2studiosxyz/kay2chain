@@ -21,7 +21,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-DESK_VERSION = "desk-2.5.1"
+DESK_VERSION = "desk-2.5.2"
 DESK_MODE = "PAPER_WATCH"
 CACHE_TTL_SECONDS = 3.0
 TICKER_TTL_SECONDS = 1.5

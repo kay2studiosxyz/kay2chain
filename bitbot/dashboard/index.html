@@ -13,11 +13,11 @@
   <link rel="icon" type="image/svg+xml" href="./favicon.svg">
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png">
-  <link rel="stylesheet" href="./styles.css?v=desk-2.5.1">
-  <link rel="stylesheet" href="./premium.css?v=desk-2.5.1">
-  <link rel="stylesheet" href="./terminal.css?v=desk-2.5.1">
+  <link rel="stylesheet" href="./styles.css?v=desk-2.5.2">
+  <link rel="stylesheet" href="./premium.css?v=desk-2.5.2">
+  <link rel="stylesheet" href="./terminal.css?v=desk-2.5.2">
   <script src="./lightweight-charts.js" defer></script>
-  <script src="./app.js?v=desk-2.5.1" defer></script>
+  <script src="./app.js?v=desk-2.5.2" defer></script>
 </head>
 <body class="hl-shell">
   <a class="skip" href="#main">Skip to desk</a>
@@ -161,6 +161,7 @@
         <aside class="hl-ticket pane" data-pane="ticket" aria-label="Order ticket">
           <button type="button" class="sheet-grab" data-close-sheet aria-label="Close ticket"><i></i></button>
           <form class="trade-ticket" id="trade-form" autocomplete="off">
+            <div class="ticket-scroll">
             <div class="ticket-head pad-hide">
               <div>
                 <h2>Place order</h2>
@@ -285,6 +286,7 @@
               </label>
             </div>
 
+            </div>
             <div class="ticket-actions exchange-actions">
               <button type="submit" class="primary-button side-action long" id="btn-simulate">Buy / Long</button>
               <button type="button" class="secondary-button" id="btn-live" disabled title="Needs Kane LIVE OK">LIVE · locked</button>

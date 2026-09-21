@@ -225,6 +225,7 @@ body.live-ok .hl-lock { color: var(--hl-amber); background: #e8ca8c18; border-co
   background: var(--hl-panel-2); overflow: auto; min-height: 0;
 }
 .trade-ticket { padding: 10px 12px 16px; display: flex; flex-direction: column; gap: 10px; }
+.ticket-scroll { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
 .ticket-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
 .ticket-head h2 { margin: 0; font-size: 14px; font-weight: 600; }
 .ticket-sub { margin: 2px 0 0; font-size: 11px; color: var(--hl-muted); }
@@ -553,17 +554,24 @@ body.live-ok .hl-lock { color: var(--hl-amber); background: #e8ca8c18; border-co
   .hl-book, .hl-tape, .hl-dock-panel { flex: 1; min-height: 0; overflow: auto; }
   .hl-ticket { background: #10161b; }
   .hl-ticket .trade-ticket {
-    overflow: auto;
+    overflow: hidden;
     flex: 1;
     min-height: 0;
-    padding-bottom: 4px;
+    padding-bottom: 8px;
   }
-  .hl-trade[data-mobile-pane="ticket"] .ticket-actions {
-    position: sticky;
-    bottom: 0;
-    z-index: 2;
-    background: linear-gradient(180deg, #10161b00, #10161b 28%);
-    padding-top: 10px;
+  .hl-ticket .ticket-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .hl-ticket .ticket-actions {
+    flex-shrink: 0;
+    position: static;
+    background: #10161b;
+    padding-top: 8px;
   }
   .pad-hide, .m-hide { display: none !important; }
   #btn-live { display: none; }
