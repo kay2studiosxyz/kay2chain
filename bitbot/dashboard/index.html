@@ -13,11 +13,11 @@
   <link rel="icon" type="image/svg+xml" href="./favicon.svg">
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png">
-  <link rel="stylesheet" href="./styles.css?v=desk-2.5.2">
-  <link rel="stylesheet" href="./premium.css?v=desk-2.5.2">
-  <link rel="stylesheet" href="./terminal.css?v=desk-2.5.2">
+  <link rel="stylesheet" href="./styles.css?v=desk-2.5.3">
+  <link rel="stylesheet" href="./premium.css?v=desk-2.5.3">
+  <link rel="stylesheet" href="./terminal.css?v=desk-2.5.3">
   <script src="./lightweight-charts.js" defer></script>
-  <script src="./app.js?v=desk-2.5.2" defer></script>
+  <script src="./app.js?v=desk-2.5.3" defer></script>
 </head>
 <body class="hl-shell">
   <a class="skip" href="#main">Skip to desk</a>
@@ -230,7 +230,7 @@
             </div>
             <p class="field-hint" hidden>Margin mode: <strong id="t-margin-mode">crossed</strong></p>
 
-            <div class="slider-block">
+            <div class="slider-block lev-block">
               <div class="slider-head">
                 <span>Leverage</span>
                 <strong><span id="t-lev-readout">25</span>×</strong>
@@ -246,7 +246,7 @@
               <button type="button" class="size-mode-btn active" data-size-mode="usdt">USDT</button>
             </div>
 
-            <label class="field compact">
+            <label class="field compact size-field">
               <span id="t-size-label">Amount (USDT)</span>
               <div class="size-input-row">
                 <input id="t-size" type="number" step="any" min="0" inputmode="decimal" placeholder="0.00" required>
@@ -254,7 +254,7 @@
               </div>
             </label>
 
-            <div class="slider-block">
+            <div class="slider-block pct-block">
               <div class="slider-head">
                 <span>% of available</span>
                 <strong><span id="t-pct-readout">0</span>%</strong>

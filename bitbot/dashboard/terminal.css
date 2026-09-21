@@ -555,20 +555,31 @@ body.live-ok .hl-lock { color: var(--hl-amber); background: #e8ca8c18; border-co
   .hl-ticket { background: #10161b; }
   .hl-ticket .trade-ticket {
     overflow: hidden;
-    flex: 1;
+    flex: 1 1 auto;
+    height: 0;
     min-height: 0;
     padding-bottom: 8px;
   }
   .hl-ticket .ticket-scroll {
-    flex: 1;
+    flex: 1 1 auto;
+    height: 0;
     min-height: 0;
     overflow: auto;
     display: flex;
     flex-direction: column;
     gap: 10px;
   }
+  .hl-ticket .ticket-scroll > .side-toggle { order: 1; }
+  .hl-ticket .ticket-scroll > .lev-block { order: 2; }
+  .hl-ticket .ticket-scroll > .size-mode { order: 3; }
+  .hl-ticket .ticket-scroll > .size-field { order: 4; }
+  .hl-ticket .ticket-scroll > .pct-block { order: 5; }
+  .hl-ticket .ticket-scroll > .cost-strip { order: 6; }
+  .hl-ticket .ticket-scroll > .open-pos-strip { order: 7; }
+  .hl-ticket .ticket-scroll > .ticket-symbol-row { order: 8; }
+  .hl-ticket .ticket-scroll > .row-2 { order: 9; }
   .hl-ticket .ticket-actions {
-    flex-shrink: 0;
+    flex: 0 0 auto;
     position: static;
     background: #10161b;
     padding-top: 8px;
