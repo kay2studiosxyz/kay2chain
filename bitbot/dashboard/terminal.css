@@ -549,8 +549,18 @@ body.live-ok .hl-lock { color: var(--hl-amber); background: #e8ca8c18; border-co
     transform: translateY(0);
     pointer-events: auto;
   }
-  .hl-trade[data-mobile-pane="ticket"] .hl-ticket { max-height: min(68dvh, 620px); }
-  .hl-trade[data-mobile-pane="dock"] .hl-dock { max-height: min(72dvh, 640px); }
+  .hl-trade[data-mobile-pane="ticket"] .hl-ticket {
+    height: min(68dvh, 620px);
+    max-height: min(68dvh, 620px);
+  }
+  .hl-trade[data-mobile-pane="dock"] .hl-dock {
+    height: min(72dvh, 640px);
+    max-height: min(72dvh, 640px);
+  }
+  .hl-trade[data-mobile-pane="book"] .hl-depth {
+    height: min(62dvh, 560px);
+    max-height: min(62dvh, 560px);
+  }
   .hl-book, .hl-tape, .hl-dock-panel { flex: 1; min-height: 0; overflow: auto; }
   .hl-ticket { background: #10161b; }
   .hl-ticket .trade-ticket {

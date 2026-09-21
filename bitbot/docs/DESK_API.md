@@ -9,7 +9,7 @@ Mode default is **PAPER_WATCH**. LIVE order placement stays locked unless
 
 ### `GET /api/health`
 ```json
-{ "ok": true, "service": "bitbot-dashboard", "mode": "PAPER_WATCH", "version": "desk-2.5.3", "ts": "…", "live_trading": false, "live_lock": "…" }
+{ "ok": true, "service": "bitbot-dashboard", "mode": "PAPER_WATCH", "version": "desk-2.5.4", "ts": "…", "live_trading": false, "live_lock": "…" }
 ```
 
 ### `GET /api/desk`
