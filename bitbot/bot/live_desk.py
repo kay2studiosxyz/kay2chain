@@ -21,7 +21,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-DESK_VERSION = "desk-2.2.1"
+DESK_VERSION = "desk-2.3.0"
 DESK_MODE = "PAPER_WATCH"
 CACHE_TTL_SECONDS = 3.0
 TICKER_TTL_SECONDS = 1.5
@@ -29,6 +29,12 @@ CANDLES_TTL_SECONDS = 8.0
 FILLS_TTL_SECONDS = 5.0
 FILLS_LIMIT_DEFAULT = 80
 FILLS_LIMIT_MAX = 200
+ORDERBOOK_TTL_SECONDS = 0.8
+ORDERBOOK_LIMIT_DEFAULT = 20
+ORDERBOOK_LIMIT_MAX = 50
+TRADES_TTL_SECONDS = 1.5
+TRADES_LIMIT_DEFAULT = 40
+TRADES_LIMIT_MAX = 100
 CATEGORIES = ("USDT-FUTURES", "USDC-FUTURES")
 ALLOWED_CATEGORIES = frozenset(
     {"USDT-FUTURES", "USDC-FUTURES", "COIN-FUTURES", "SPOT"}
@@ -85,6 +91,8 @@ _fetch_lock = threading.Lock()
 _ticker_cache: dict[str, Any] = {}
 _candles_cache: dict[str, Any] = {}
 _fills_cache: dict[str, Any] = {}
+_orderbook_cache: dict[str, Any] = {}
+_trades_cache: dict[str, Any] = {}
 _client_mod: types.ModuleType | None = None
 
 
@@ -568,7 +576,7 @@ def _normalize_granularity(granularity: str | None) -> str:
 
 def _public_get(path: str, params: dict[str, Any]) -> Any:
     url = f"{BITGET_REST}{path}?{urlencode(params)}"
-    req = Request(url, headers={"User-Agent": "bitbot-desk/2.0", "Accept": "application/json"})
+    req = Request(url, headers={"User-Agent": "bitbot-desk/2.3", "Accept": "application/json"})
     try:
         with urlopen(req, timeout=6) as resp:
             body = resp.read().decode("utf-8", errors="replace")
@@ -773,12 +781,16 @@ def ticker_payload(symbol: str, category: str | None = None) -> dict[str, Any]:
             "mark": mark,
             "bid": _num(row.get("bid1Price") or row.get("bidPr")),
             "ask": _num(row.get("ask1Price") or row.get("askPr")),
+            "bid_size": _num(row.get("bid1Size")),
+            "ask_size": _num(row.get("ask1Size")),
             "high24h": _num(row.get("highPrice24h")),
             "low24h": _num(row.get("lowPrice24h")),
             "open24h": _num(row.get("openPrice24h")),
             "change24h": None,
             "base_volume": _num(row.get("baseVolume") or row.get("volume24h")),
             "quote_volume": _num(row.get("quoteVolume") or row.get("turnover24h")),
+            "funding": _num(row.get("fundingRate")),
+            "open_interest": _num(row.get("openInterest")),
             "stale": False,
         }
         if payload["open24h"] and payload["last"] is not None and abs(payload["open24h"]) > 1e-12:
@@ -903,6 +915,251 @@ def candles_payload(
             "candles": [],
             "count": 0,
         }
+
+
+def _book_levels(rows: Any, reverse: bool) -> list[dict[str, Any]]:
+    """Normalise Bitget [price, size] (or dict) rows into sorted depth levels."""
+    levels: list[dict[str, Any]] = []
+    if not isinstance(rows, list):
+        return levels
+    for row in rows:
+        price = size = None
+        if isinstance(row, (list, tuple)) and len(row) >= 2:
+            price, size = _num(row[0]), _num(row[1])
+        elif isinstance(row, dict):
+            price = _num(row.get("price") or row.get("px"))
+            size = _num(row.get("size") or row.get("sz") or row.get("qty"))
+        if price is None or size is None or price <= 0 or size < 0:
+            continue
+        levels.append({"price": price, "size": size})
+    levels.sort(key=lambda item: item["price"], reverse=reverse)
+    return levels
+
+
+def _with_cumulative(levels: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    total = 0.0
+    notional = 0.0
+    out: list[dict[str, Any]] = []
+    for row in levels:
+        size = float(row["size"])
+        price = float(row["price"])
+        total += size
+        notional += size * price
+        out.append(
+            {
+                "price": price,
+                "size": size,
+                "cum_size": total,
+                "cum_notional": round(notional, 4),
+            }
+        )
+    return out
+
+
+def _normalize_public_trade(
+    row: Any, symbol: str, category: str
+) -> dict[str, Any] | None:
+    if not isinstance(row, dict):
+        return None
+    side = str(row.get("side") or "").strip().lower()
+    if side not in {"buy", "sell"}:
+        return None
+    price = _num(row.get("price"))
+    qty = _num(row.get("size") or row.get("qty") or row.get("baseVolume"))
+    raw_t = row.get("ts") or row.get("cTime") or row.get("time")
+    try:
+        ts_ms = int(str(raw_t).strip())
+    except (TypeError, ValueError):
+        return None
+    if ts_ms < 10_000_000_000:
+        ts_ms *= 1000
+    if price is None or qty is None or price <= 0 or qty <= 0:
+        return None
+    return {
+        "id": str(row.get("execId") or row.get("tradeId") or f"{symbol}-{ts_ms}-{side}")[:80],
+        "symbol": symbol,
+        "category": category,
+        "side": side,
+        "price": price,
+        "qty": qty,
+        "ts_ms": ts_ms,
+        "time": ts_ms // 1000,
+        "source": "bitget",
+    }
+
+
+def _market_fail(
+    symbol: str,
+    category: str,
+    error: str,
+    extra: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    payload = {
+        "ok": False,
+        "mode": DESK_MODE,
+        "version": DESK_VERSION,
+        "ts": _utcnow(),
+        "symbol": symbol,
+        "category": category,
+        "error": error[:200],
+        "stale": False,
+    }
+    if extra:
+        payload.update(extra)
+    return payload
+
+
+def orderbook_payload(
+    symbol: str,
+    category: str | None = None,
+    limit: int | None = None,
+) -> dict[str, Any]:
+    """Public Bitget depth for the Hyperliquid-style book. Never authenticated."""
+    sym = _normalize_symbol(symbol)
+    cat = _normalize_category(category)
+    lim = ORDERBOOK_LIMIT_DEFAULT if limit is None else int(limit)
+    lim = max(1, min(ORDERBOOK_LIMIT_MAX, lim))
+    cache_key = f"{cat}:{sym}:{lim}"
+    now = time.monotonic()
+    with _lock:
+        hit = _orderbook_cache.get(cache_key)
+        if hit and now < hit["expires"]:
+            return dict(hit["payload"])
+
+    try:
+        data = _public_get(
+            "/api/v3/market/orderbook",
+            {"category": cat, "symbol": sym, "limit": lim},
+        )
+        book = data if isinstance(data, dict) else {}
+        asks_raw = book.get("a") or book.get("asks") or []
+        bids_raw = book.get("b") or book.get("bids") or []
+        asks = _with_cumulative(_book_levels(asks_raw, reverse=False)[:lim])
+        bids = _with_cumulative(_book_levels(bids_raw, reverse=True)[:lim])
+        best_ask = asks[0]["price"] if asks else None
+        best_bid = bids[0]["price"] if bids else None
+        spread = None
+        spread_bps = None
+        mid = None
+        if best_ask is not None and best_bid is not None:
+            spread = best_ask - best_bid
+            mid = (best_ask + best_bid) / 2.0
+            if mid > 1e-12:
+                spread_bps = (spread / mid) * 10_000.0
+        ts_raw = book.get("ts")
+        try:
+            book_ts = int(str(ts_raw).strip()) if ts_raw is not None else None
+        except (TypeError, ValueError):
+            book_ts = None
+        payload = {
+            "ok": True,
+            "mode": DESK_MODE,
+            "version": DESK_VERSION,
+            "ts": _utcnow(),
+            "symbol": sym,
+            "category": cat,
+            "limit": lim,
+            "bids": bids,
+            "asks": asks,
+            "best_bid": best_bid,
+            "best_ask": best_ask,
+            "spread": spread,
+            "spread_bps": spread_bps,
+            "mid": mid,
+            "book_ts": book_ts,
+            "stale": False,
+        }
+        with _lock:
+            _orderbook_cache[cache_key] = {
+                "expires": time.monotonic() + ORDERBOOK_TTL_SECONDS,
+                "payload": payload,
+            }
+            if len(_orderbook_cache) > 48:
+                for k in list(_orderbook_cache.keys())[:12]:
+                    _orderbook_cache.pop(k, None)
+        return payload
+    except Exception as exc:  # noqa: BLE001
+        with _lock:
+            hit = _orderbook_cache.get(cache_key)
+            if hit:
+                stale = dict(hit["payload"])
+                stale["stale"] = True
+                stale["error"] = str(exc)[:200]
+                stale["ts"] = _utcnow()
+                return stale
+        return _market_fail(
+            sym,
+            cat,
+            str(exc),
+            {"bids": [], "asks": [], "limit": lim},
+        )
+
+
+def trades_payload(
+    symbol: str,
+    category: str | None = None,
+    limit: int | None = None,
+) -> dict[str, Any]:
+    """Public Bitget tape (recent fills). Distinct from authenticated account fills."""
+    sym = _normalize_symbol(symbol)
+    cat = _normalize_category(category)
+    lim = TRADES_LIMIT_DEFAULT if limit is None else int(limit)
+    lim = max(1, min(TRADES_LIMIT_MAX, lim))
+    cache_key = f"{cat}:{sym}:{lim}"
+    now = time.monotonic()
+    with _lock:
+        hit = _trades_cache.get(cache_key)
+        if hit and now < hit["expires"]:
+            return dict(hit["payload"])
+
+    try:
+        data = _public_get(
+            "/api/v3/market/fills",
+            {"category": cat, "symbol": sym, "limit": lim},
+        )
+        rows = data if isinstance(data, list) else []
+        trades: list[dict[str, Any]] = []
+        for row in rows:
+            normalized = _normalize_public_trade(row, sym, cat)
+            if normalized:
+                trades.append(normalized)
+        trades.sort(key=lambda item: item["ts_ms"], reverse=True)
+        trades = trades[:lim]
+        payload = {
+            "ok": True,
+            "mode": DESK_MODE,
+            "version": DESK_VERSION,
+            "ts": _utcnow(),
+            "symbol": sym,
+            "category": cat,
+            "trades": trades,
+            "count": len(trades),
+            "stale": False,
+        }
+        with _lock:
+            _trades_cache[cache_key] = {
+                "expires": time.monotonic() + TRADES_TTL_SECONDS,
+                "payload": payload,
+            }
+            if len(_trades_cache) > 48:
+                for k in list(_trades_cache.keys())[:12]:
+                    _trades_cache.pop(k, None)
+        return payload
+    except Exception as exc:  # noqa: BLE001
+        with _lock:
+            hit = _trades_cache.get(cache_key)
+            if hit:
+                stale = dict(hit["payload"])
+                stale["stale"] = True
+                stale["error"] = str(exc)[:200]
+                stale["ts"] = _utcnow()
+                return stale
+        return _market_fail(
+            sym,
+            cat,
+            str(exc),
+            {"trades": [], "count": 0},
+        )
 
 
 def trade_preview(body: dict[str, Any] | None) -> dict[str, Any]:
