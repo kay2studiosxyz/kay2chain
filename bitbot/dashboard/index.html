@@ -13,11 +13,11 @@
   <link rel="icon" type="image/svg+xml" href="./favicon.svg">
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png">
-  <link rel="stylesheet" href="./styles.css?v=desk-2.4.0">
-  <link rel="stylesheet" href="./premium.css?v=desk-2.4.0">
-  <link rel="stylesheet" href="./terminal.css?v=desk-2.4.0">
+  <link rel="stylesheet" href="./styles.css?v=desk-2.4.1">
+  <link rel="stylesheet" href="./premium.css?v=desk-2.4.1">
+  <link rel="stylesheet" href="./terminal.css?v=desk-2.4.1">
   <script src="./lightweight-charts.js" defer></script>
-  <script src="./app.js?v=desk-2.4.0" defer></script>
+  <script src="./app.js?v=desk-2.4.1" defer></script>
 </head>
 <body class="hl-shell">
   <a class="skip" href="#main">Skip to desk</a>
@@ -56,7 +56,7 @@
           <span>Bid / Ask</span>
           <strong><em id="mh-bid" class="up">—</em><i>/</i><em id="mh-ask" class="down">—</em></strong>
         </div>
-        <div class="hl-stat">
+        <div class="hl-stat desk-extra">
           <span>Funding</span>
           <strong id="mh-funding">—</strong>
         </div>
@@ -99,7 +99,7 @@
       <div class="hl-lock" id="mode-badge" title="Default dry-run — LIVE needs Kane unlock">
         <i></i><span>PAPER / WATCH</span>
       </div>
-      <span class="connection" id="connection"><i></i><span>Connecting</span></span>
+      <span class="connection" id="connection"><i></i><span class="conn-label">Connecting</span></span>
       <button class="icon-button" id="refresh" aria-label="Refresh desk" title="Refresh"><span data-icon="refresh"></span></button>
     </div>
   </header>
@@ -158,7 +158,7 @@
 
         <aside class="hl-ticket pane" data-pane="ticket" aria-label="Order ticket">
           <form class="trade-ticket" id="trade-form" autocomplete="off">
-            <div class="ticket-head">
+            <div class="ticket-head pad-hide">
               <div>
                 <h2>Place order</h2>
                 <p class="ticket-sub">USDT-M · Cross · Bitget</p>
@@ -166,7 +166,7 @@
               <span class="subtle-chip watch-chip" id="mode-chip"><i></i> PAPER / WATCH</span>
             </div>
 
-            <div class="bal-strip" aria-label="Account balances">
+            <div class="bal-strip pad-hide" aria-label="Account balances">
               <div>
                 <span>Available</span>
                 <strong id="t-avail-usdt">—</strong>
@@ -185,7 +185,7 @@
 
             <div id="open-pos-strip" class="open-pos-strip" hidden></div>
 
-            <div class="ticket-symbol-row">
+            <div class="ticket-symbol-row pad-hide">
               <label class="field compact">
                 <span>Contract</span>
                 <select id="t-symbol" name="symbol">
@@ -232,8 +232,8 @@
                 <strong><span id="t-lev-readout">25</span>×</strong>
               </div>
               <input id="t-leverage-range" class="ex-range lev" type="range" min="1" max="150" step="1" value="25" aria-label="Leverage slider">
-              <div class="slider-ticks" aria-hidden="true"><span>1×</span><span>10×</span><span>50×</span><span>100×</span><span>150×</span></div>
-              <p class="quiet-label" id="t-lev-hint">Risk · 10× and above</p>
+              <div class="slider-ticks pad-hide" aria-hidden="true"><span>1×</span><span>10×</span><span>50×</span><span>100×</span><span>150×</span></div>
+              <p class="quiet-label pad-hide" id="t-lev-hint">Risk · 10× and above</p>
               <input id="t-leverage" type="hidden" value="25">
             </div>
 
@@ -286,9 +286,9 @@
               <button type="submit" class="primary-button side-action long" id="btn-simulate">Buy / Long</button>
               <button type="button" class="secondary-button" id="btn-live" disabled title="Needs Kane LIVE OK">LIVE · locked</button>
             </div>
-            <p class="ticket-lock" id="ticket-lock">LIVE disabled until BITBOT_LIVE_OK. STOP ALL TRADING.</p>
+            <p class="ticket-lock pad-hide" id="ticket-lock">LIVE disabled until BITBOT_LIVE_OK. STOP ALL TRADING.</p>
 
-            <div id="trade-preview" class="trade-preview empty">Size the ticket — preview updates live. No order is sent.</div>
+            <div id="trade-preview" class="trade-preview empty pad-hide">Size the ticket — preview updates live. No order is sent.</div>
           </form>
         </aside>
       </div>

@@ -993,8 +993,8 @@
         position: isBuy ? 'belowBar' : 'aboveBar',
         color: isBuy ? '#6dffb0' : '#ff6b7a',
         shape: 'circle',
-        text: n > 1 ? `${label}·${n}` : label,
-        size: 1.2,
+        text: '',
+        size: 0.7,
         id: fill.id || `${t}-${label}-${n}`,
         _detail: detail,
       });
@@ -1068,14 +1068,17 @@
       wickUpColor: '#3dd68c',
       wickDownColor: '#ff6b7a',
     });
-    const ro = new ResizeObserver(() => {
+    const resize = () => {
       if (!state.chart) return;
       state.chart.applyOptions({
         width: el.clientWidth,
         height: Math.max(220, el.clientHeight || height),
       });
-    });
+    };
+    const ro = new ResizeObserver(resize);
     ro.observe(el);
+    window.addEventListener('orientationchange', () => setTimeout(resize, 250));
+    window.addEventListener('resize', resize);
   }
 
   async function loadCandles(force) {
