@@ -31,6 +31,7 @@ body.hl-shell {
 }
 .skip:focus { left: 8px; top: 8px; z-index: 99; background: #111; color: #fff; padding: 8px; }
 button, a, select, input { touch-action: manipulation; font: inherit; color: inherit; }
+[hidden] { display: none !important; }
 button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible {
   outline: 2px solid var(--hl-cyan);
   outline-offset: 2px;
@@ -72,7 +73,7 @@ button:focus-visible, a:focus-visible, select:focus-visible, input:focus-visible
 .hl-nav .nav-link.active, .hl-bottom-nav .nav-link.active { color: var(--hl-cyan); background: #35e5e510; }
 .nav-count { font-size: 10px; opacity: .7; margin-left: 4px; }
 
-.hl-market { display: flex; align-items: center; gap: 14px; min-width: 0; overflow: hidden; }
+.hl-market { display: flex; align-items: center; gap: 14px; min-width: 0; overflow-x: auto; }
 .hl-pair { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .hl-pair-meta { font-size: 9px; letter-spacing: .12em; text-transform: uppercase; color: var(--hl-dim); }
 .symbol-switch { display: flex; gap: 4px; flex-wrap: wrap; }
@@ -169,7 +170,7 @@ body.live-ok .hl-lock { color: var(--hl-amber); background: #e8ca8c18; border-co
   padding: 2px 10px; font-size: 11px; font-family: var(--hl-mono);
 }
 .book-head { color: var(--hl-dim); font-size: 9px; letter-spacing: .06em; text-transform: uppercase; padding-top: 8px; }
-.book-asks, .book-bids { flex: 1; overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; }
+.book-asks, .book-bids { flex: 1; overflow: hidden; display: flex; flex-direction: column; min-height: 0; }
 .book-asks { justify-content: flex-end; }
 .book-bids { justify-content: flex-start; }
 .book-row {
@@ -377,7 +378,8 @@ body.live-ok .hl-lock { color: var(--hl-amber); background: #e8ca8c18; border-co
   .hl-trade[data-mobile-pane="dock"] .pane[data-pane="dock"] { display: flex; flex-direction: column; }
   .hl-trade:not([data-mobile-pane]) .pane[data-pane="chart"] { display: flex; flex-direction: column; }
   .tv-chart { min-height: 52vh; }
-  .hl-depth, .hl-ticket, .hl-dock { min-height: 62vh; }
+  .hl-depth, .hl-ticket, .hl-dock { min-height: 62vh; padding-bottom: calc(8px + env(safe-area-inset-bottom)); }
+  .hl-trade { padding-bottom: calc(64px + env(safe-area-inset-bottom)); }
   .hl-bottom-nav {
     display: grid; grid-template-columns: 1fr 1fr 1fr;
     position: fixed; inset: auto 0 0; z-index: 20;

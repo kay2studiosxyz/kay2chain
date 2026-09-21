@@ -1075,10 +1075,17 @@
       const bps = data.spread_bps != null ? `${fmt(data.spread_bps, 2)} bps` : fmtPx(data.spread);
       $('#book-spread-val').textContent = bps;
     }
+    if ($('#mh-bid') && data.best_bid != null) $('#mh-bid').textContent = fmtPx(data.best_bid);
+    if ($('#mh-ask') && data.best_ask != null) $('#mh-ask').textContent = fmtPx(data.best_ask);
     [asksEl, bidsEl].forEach((root) => {
-      root.querySelectorAll('[data-book-price]').forEach((btn) => {
-        btn.addEventListener('click', () => applyBookPrice(btn.dataset.bookPrice, btn.dataset.bookSide));
-      });
+      if (!root.dataset.wired) {
+        root.dataset.wired = '1';
+        root.addEventListener('click', (ev) => {
+          const btn = ev.target.closest('[data-book-price]');
+          if (!btn) return;
+          applyBookPrice(btn.dataset.bookPrice, btn.dataset.bookSide);
+        });
+      }
     });
   }
 
