@@ -13,11 +13,11 @@
   <link rel="icon" type="image/svg+xml" href="./favicon.svg">
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png">
-  <link rel="stylesheet" href="./styles.css?v=desk-2.5.4">
-  <link rel="stylesheet" href="./premium.css?v=desk-2.5.4">
-  <link rel="stylesheet" href="./terminal.css?v=desk-2.5.4">
+  <link rel="stylesheet" href="./styles.css?v=desk-2.5.5">
+  <link rel="stylesheet" href="./premium.css?v=desk-2.5.5">
+  <link rel="stylesheet" href="./terminal.css?v=desk-2.5.5">
   <script src="./lightweight-charts.js" defer></script>
-  <script src="./app.js?v=desk-2.5.4" defer></script>
+  <script src="./app.js?v=desk-2.5.5" defer></script>
 </head>
 <body class="hl-shell">
   <a class="skip" href="#main">Skip to desk</a>
@@ -88,7 +88,7 @@
         <span>Equity</span>
         <strong id="top-equity">—</strong>
       </div>
-      <div class="hl-acct-cell">
+      <div class="hl-acct-cell" id="m-port-hit" data-view="portfolio">
         <span>uPnL</span>
         <strong id="top-upnl">—</strong>
       </div>
@@ -484,11 +484,10 @@
 
   <button type="button" class="m-scrim" id="m-scrim" hidden data-close-sheet aria-label="Dismiss"></button>
   <nav class="m-action-bar" aria-label="Trade actions">
-    <button type="button" data-pane="book" aria-label="Order book">Book</button>
-    <button type="button" class="m-buy" data-ticket-side="long">Buy</button>
-    <button type="button" class="m-sell" data-ticket-side="short">Sell</button>
-    <button type="button" data-pane="dock" aria-label="Open positions">Pos <em id="m-pos-n">0</em></button>
-    <a href="#portfolio" data-view="portfolio" class="nav-link">Port</a>
+    <button type="button" class="m-aux" data-pane="book" aria-label="Order book"><span>Book</span></button>
+    <button type="button" class="m-buy" data-ticket-side="long"><span>Buy</span></button>
+    <button type="button" class="m-sell" data-ticket-side="short"><span>Sell</span></button>
+    <button type="button" class="m-aux" data-pane="dock" aria-label="Open positions"><span id="m-pos-n">Pos</span></button>
   </nav>
   <nav class="hl-bottom-nav" aria-label="Mobile">
     <a href="#trade" data-view="trade" class="nav-link active"><span data-icon="arrows"></span>Trade</a>

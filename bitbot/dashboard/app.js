@@ -1049,12 +1049,16 @@
       layout: {
         background: { color: '#0b0f13' },
         textColor: '#8b98a4',
+        attributionLogo: false,
       },
       grid: {
         vertLines: { color: 'rgba(255,255,255,0.04)' },
         horzLines: { color: 'rgba(255,255,255,0.04)' },
       },
-      rightPriceScale: { borderColor: 'rgba(255,255,255,0.08)' },
+      rightPriceScale: {
+        borderColor: 'rgba(255,255,255,0.08)',
+        scaleMargins: isPhone() ? { top: 0.04, bottom: 0.12 } : { top: 0.08, bottom: 0.08 },
+      },
       timeScale: { borderColor: 'rgba(255,255,255,0.08)', timeVisible: true, secondsVisible: false },
       crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
       width: el.clientWidth,
@@ -1573,7 +1577,7 @@
 
   function paintPosCount() {
     const n = state.positions.length || 0;
-    if ($('#m-pos-n')) $('#m-pos-n').textContent = String(n);
+    if ($('#m-pos-n')) $('#m-pos-n').textContent = n ? `Pos ${n}` : 'Pos';
     if ($('#nav-pos')) $('#nav-pos').textContent = String(n);
     if ($('#pos-count')) $('#pos-count').textContent = `${n} open`;
   }
@@ -1588,10 +1592,9 @@
       return;
     }
     const side = (pos.side || '').toLowerCase();
-    const more = state.positions.length > 1 ? `<em>+${state.positions.length - 1}</em>` : '';
     card.hidden = false;
     card.innerHTML = `
-      <span><strong>${pairLabel(pos.symbol)}</strong><i class="${side}">${side}</i>${pos.leverage != null ? `${fmt(pos.leverage, 0)}×` : ''}${more}</span>
+      <span><strong>${pairLabel(pos.symbol)}</strong><i class="${side}">${side}</i>${pos.leverage != null ? `${fmt(pos.leverage, 0)}×` : ''}</span>
       <strong class="${pnlClass(pos.unrealised_pnl)}">${money(pos.unrealised_pnl)}</strong>`;
   }
 
@@ -1664,6 +1667,14 @@
     $$('[data-ticket-side]').forEach((btn) => {
       btn.addEventListener('click', () => openTicket(btn.dataset.ticketSide));
     });
+    const portHit = $('#m-port-hit');
+    if (portHit) {
+      portHit.addEventListener('click', () => {
+        if (!isPhone()) return;
+        location.hash = 'portfolio';
+        setView('portfolio');
+      });
+    }
     $$('[data-close-sheet]').forEach((el) => {
       el.addEventListener('click', closeSheet);
     });
