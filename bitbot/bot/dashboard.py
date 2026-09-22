@@ -707,7 +707,7 @@ class DashboardStore:
 
 
 def make_handler(store):
-    stream_slots = threading.BoundedSemaphore(16)
+    stream_slots = threading.BoundedSemaphore(24)
     cache_lock = threading.Lock()
     cache = {}
 
@@ -798,6 +798,55 @@ def make_handler(store):
             except (BrokenPipeError,ConnectionResetError,TimeoutError,OSError):pass
             finally:
                 self.close_connection=True
+                stream_slots.release()
+
+        def _market_stream(self, symbol, category):
+            from bot import live_desk as _desk
+            if self.command == "HEAD":
+                self._send(200, b"", "text/event-stream")
+                return
+            if not stream_slots.acquire(blocking=False):
+                self._json(503, {"error": "Live connection busy; retrying shortly"})
+                return
+            try:
+                self.send_response(200)
+                for key, value in {
+                    "Content-Type": "text/event-stream; charset=utf-8",
+                    "Cache-Control": "no-store, no-transform",
+                    "X-Accel-Buffering": "no",
+                    "X-Content-Type-Options": "nosniff",
+                    "Connection": "close",
+                }.items():
+                    self.send_header(key, value)
+                self.end_headers()
+                deadline = time.monotonic() + 60
+                self.wfile.write(b"retry: 400\n\n")
+                hello = json.dumps(
+                    {"service": "bitbot-market", "version": _desk.DESK_VERSION, "symbol": symbol},
+                    separators=(",", ":"),
+                ).encode("utf-8")
+                self.wfile.write(b"event: hello\ndata: " + hello + b"\n\n")
+                self.wfile.flush()
+                last = b""
+                while time.monotonic() < deadline:
+                    try:
+                        snap = _desk.market_snapshot(symbol, category)
+                        blob = json.dumps(snap, separators=(",", ":"), allow_nan=False).encode("utf-8")
+                    except Exception:
+                        self.wfile.write(
+                            b'event: unavailable\ndata: {"error":"Market feed temporarily unavailable"}\n\n'
+                        )
+                        self.wfile.flush()
+                        break
+                    if blob != last:
+                        self.wfile.write(b"event: market\ndata: " + blob + b"\n\n")
+                        self.wfile.flush()
+                        last = blob
+                    time.sleep(0.15)
+            except (BrokenPipeError, ConnectionResetError, TimeoutError, OSError):
+                pass
+            finally:
+                self.close_connection = True
                 stream_slots.release()
 
         def _desk_stream(self):
@@ -931,6 +980,37 @@ def make_handler(store):
                             self._json(200 if payload.get("ok") else 503, payload)
                     except ValueError as exc:
                         raise DashboardError(400, str(exc)) from exc
+                elif parsed.path == "/api/market":
+                    from bot import live_desk
+                    query = parse_qs(parsed.query, keep_blank_values=True, max_num_fields=6)
+                    allowed = {"symbol", "category"}
+                    if set(query) - allowed or any(len(value) != 1 for value in query.values()):
+                        raise DashboardError(400, "Invalid query")
+                    symbol = (query.get("symbol") or [None])[0]
+                    if not symbol:
+                        raise DashboardError(400, "symbol required")
+                    category = (query.get("category") or ["USDT-FUTURES"])[0]
+                    try:
+                        payload = live_desk.market_snapshot(symbol, category)
+                    except ValueError as exc:
+                        raise DashboardError(400, str(exc)) from exc
+                    self._json(200 if payload.get("ok") else 503, payload)
+                elif parsed.path == "/api/market/stream":
+                    from bot import live_desk
+                    query = parse_qs(parsed.query, keep_blank_values=True, max_num_fields=6)
+                    allowed = {"symbol", "category"}
+                    if set(query) - allowed or any(len(value) != 1 for value in query.values()):
+                        raise DashboardError(400, "Invalid query")
+                    symbol = (query.get("symbol") or [None])[0]
+                    if not symbol:
+                        raise DashboardError(400, "symbol required")
+                    category = (query.get("category") or ["USDT-FUTURES"])[0]
+                    try:
+                        live_desk._normalize_symbol(symbol)
+                        live_desk._normalize_category(category)
+                    except ValueError as exc:
+                        raise DashboardError(400, str(exc)) from exc
+                    self._market_stream(symbol, category)
                 elif parsed.path == "/api/desk/stream":
                     if parsed.query:
                         raise DashboardError(400, "Invalid query")

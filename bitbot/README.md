@@ -1,4 +1,4 @@
-# Bitbot · custom Bitget perps desk (desk 2.5)
+# Bitbot · custom Bitget perps desk (desk 2.6)
 
 Production app for **https://bitbot.kay2.dev** runs on the ASUS NUC (`kay2nuc-1` / `100.112.164.103`) under PM2:
 
@@ -23,7 +23,7 @@ This folder mirrors the desk files for the **Bitget-backed perps app**. Venue st
 | `GET /api/fills` | Account fills for chart **buy/sell bubbles** |
 | `GET/POST /api/bot` | USDT-M futures paper scalper — SOL/HYPE/BTC/ETH 1m/5m, 10–150× (below 10× is safe) |
 
-The desk UI opens `/api/desk/stream` via `EventSource` and falls back to REST polling every 3s if the stream drops. LIVE order placement stays locked unless `BITBOT_LIVE_OK` is explicitly unlocked on the NUC. Place still does not call Bitget while locked (403) or even when unlocked on this build (501).
+The desk UI opens `/api/desk/stream` for the UTA book and `/api/market/stream` for last/book/tape. Market data is pumped from Bitget's **public WebSocket** (no key). If that feed goes quiet, free Binance USDT-M bookTicker and Bybit linear tickers fill last/bid/ask. REST polling is the fallback only. LIVE order placement stays locked unless `BITBOT_LIVE_OK` is explicitly unlocked on the NUC. Place still does not call Bitget while locked (403) or even when unlocked on this build (501).
 
 Watchlist markets: **SOLUSDT**, **HYPEUSDT**, **BTCUSDT**, **ETHUSDT**, plus any other open UTA contract.
 

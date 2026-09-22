@@ -4,8 +4,8 @@
   const POLL_POS_MS = 3000;
   const POLL_TICK_MS = 2000;
   const POLL_CANDLE_MS = 15000;
-  const POLL_BOOK_MS = 900;
-  const POLL_TAPE_MS = 1500;
+  const POLL_BOOK_MS = 400;
+  const POLL_TAPE_MS = 700;
 
   const state = {
     view: 'trade',
@@ -166,8 +166,9 @@
     if ($('#crumb')) $('#crumb').textContent = t;
     if (name === 'portfolio') {
       ensureEquityChart();
+      stopMarketStream();
+      if (isPhone()) closeSheet();
     }
-    if (name === 'portfolio' && isPhone()) closeSheet();
     if (name === 'trade') {
       paintTradeBalances();
       refreshTradeMark();
@@ -178,6 +179,7 @@
       loadTicker();
       loadOrderbook();
       loadTape();
+      startMarketStream();
     }
   }
 
@@ -641,6 +643,7 @@
     loadTicker();
     loadOrderbook();
     loadTape();
+    startMarketStream();
     refreshTradeMark();
   }
 
@@ -847,6 +850,9 @@
   let deskSource = null;
   let deskPollTimer = null;
   let deskStreamHealthy = false;
+  let marketSource = null;
+  let marketStreamHealthy = false;
+  let marketStreamSym = '';
 
   function stopDeskStream() {
     if (deskSource) {
@@ -1119,11 +1125,25 @@
     }
   }
 
-  async function loadTicker() {
-    try {
-      const { data } = await api(`/api/ticker?symbol=${encodeURIComponent(state.symbol)}&category=${encodeURIComponent(state.category)}`);
-      if (!data || !data.ok) return;
-      const last = data.mark || data.last;
+  function bumpLastCandle(price) {
+    if (!state.series || !state.bars.length) return;
+    const px = Number(price);
+    if (!Number.isFinite(px) || px <= 0) return;
+    const last = state.bars[state.bars.length - 1];
+    const next = {
+      time: last.time,
+      open: last.open,
+      high: Math.max(last.high, px),
+      low: Math.min(last.low, px),
+      close: px,
+    };
+    state.bars[state.bars.length - 1] = next;
+    try { state.series.update(next); } catch { /* ignore */ }
+  }
+
+  function applyTicker(data) {
+    if (!data || !data.ok) return;
+    const last = data.mark || data.last;
       const lastText = fmtPx(last);
       if ($('#chart-last')) $('#chart-last').textContent = lastText;
       if ($('#mh-last')) $('#mh-last').textContent = fmtPx(data.last || last);
@@ -1158,7 +1178,67 @@
             priceLineVisible: true,
           });
         } catch { /* ignore */ }
+        bumpLastCandle(data.last || data.mark);
       }
+  }
+
+  function applyMarketSnapshot(snap) {
+    if (!snap) return;
+    if (snap.ticker) applyTicker(snap.ticker);
+    if (snap.book && snap.book.ok) renderBook(snap.book);
+    if (snap.tape && snap.tape.ok) renderTape(snap.tape.trades);
+    if (snap.feed && snap.feed.ws === 'up') setConn('good', 'Live');
+  }
+
+  function stopMarketStream() {
+    if (marketSource) {
+      marketSource.close();
+      marketSource = null;
+    }
+    marketStreamHealthy = false;
+    marketStreamSym = '';
+  }
+
+  function startMarketStream() {
+    if (!('EventSource' in window) || state.view !== 'trade') return;
+    const key = `${state.symbol}|${state.category}`;
+    if (marketSource && marketStreamSym === key && marketStreamHealthy) return;
+    stopMarketStream();
+    const url = new URL('api/market/stream', document.baseURI);
+    url.searchParams.set('symbol', state.symbol);
+    url.searchParams.set('category', state.category);
+    const current = new EventSource(url);
+    marketSource = current;
+    marketStreamSym = key;
+    current.addEventListener('hello', () => {
+      if (marketSource !== current) return;
+      marketStreamHealthy = true;
+    });
+    current.addEventListener('market', (event) => {
+      if (marketSource !== current) return;
+      try {
+        const data = JSON.parse(event.data);
+        marketStreamHealthy = true;
+        applyMarketSnapshot(data);
+      } catch {
+        marketStreamHealthy = false;
+      }
+    });
+    current.addEventListener('unavailable', () => {
+      if (marketSource !== current) return;
+      marketStreamHealthy = false;
+    });
+    current.onerror = () => {
+      if (marketSource !== current) return;
+      marketStreamHealthy = false;
+    };
+  }
+
+  async function loadTicker() {
+    if (marketStreamHealthy) return;
+    try {
+      const { data } = await api(`/api/ticker?symbol=${encodeURIComponent(state.symbol)}&category=${encodeURIComponent(state.category)}`);
+      applyTicker(data);
     } catch { /* ignore */ }
   }
 
@@ -1235,7 +1315,7 @@
   }
 
   async function loadOrderbook() {
-    if (state.view !== 'trade') return;
+    if (state.view !== 'trade' || marketStreamHealthy) return;
     try {
       const { data } = await api(
         `/api/orderbook?symbol=${encodeURIComponent(state.symbol)}&category=${encodeURIComponent(state.category)}&limit=20`,
@@ -1267,7 +1347,7 @@
   }
 
   async function loadTape() {
-    if (state.view !== 'trade') return;
+    if (state.view !== 'trade' || marketStreamHealthy) return;
     try {
       const { data } = await api(
         `/api/trades?symbol=${encodeURIComponent(state.symbol)}&category=${encodeURIComponent(state.category)}&limit=40`,
@@ -2003,9 +2083,14 @@
       navigator.serviceWorker.register('./service-worker.js').catch(() => {});
     }
     startDeskStream();
-    window.addEventListener('pagehide', stopDeskStream);
+    startMarketStream();
+    window.addEventListener('pagehide', () => {
+      stopDeskStream();
+      stopMarketStream();
+    });
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden && !deskStreamHealthy) startDeskStream();
+      if (!document.hidden && state.view === 'trade' && !marketStreamHealthy) startMarketStream();
     });
     setInterval(() => {
       if (state.view === 'trade') loadTicker();

@@ -21,7 +21,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-DESK_VERSION = "desk-2.5.5"
+DESK_VERSION = "desk-2.6.0"
 DESK_MODE = "PAPER_WATCH"
 CACHE_TTL_SECONDS = 3.0
 TICKER_TTL_SECONDS = 1.5
@@ -438,6 +438,7 @@ def health() -> dict[str, Any]:
         "ts": _utcnow(),
         "live_trading": bool(lock.get("unlocked")),
         "live_lock": lock.get("message"),
+        "market_feed": _feed_status(),
     }
 
 
@@ -576,7 +577,7 @@ def _normalize_granularity(granularity: str | None) -> str:
 
 def _public_get(path: str, params: dict[str, Any]) -> Any:
     url = f"{BITGET_REST}{path}?{urlencode(params)}"
-    req = Request(url, headers={"User-Agent": "bitbot-desk/2.4", "Accept": "application/json"})
+    req = Request(url, headers={"User-Agent": "bitbot-desk/2.6", "Accept": "application/json"})
     try:
         with urlopen(req, timeout=6) as resp:
             body = resp.read().decode("utf-8", errors="replace")
@@ -750,10 +751,65 @@ def fills_payload(
         }
 
 
+def _feed_status() -> dict[str, Any]:
+    try:
+        from . import public_feed
+        return public_feed.status()
+    except Exception:
+        return {"running": False, "ws": "down"}
+
+
+def _ticker_from_feed(sym: str, cat: str) -> dict[str, Any] | None:
+    try:
+        from . import public_feed
+        row = public_feed.ticker(sym)
+    except Exception:
+        return None
+    if not row:
+        return None
+    payload = {
+        "ok": True,
+        "mode": DESK_MODE,
+        "version": DESK_VERSION,
+        "ts": _utcnow(),
+        "symbol": sym,
+        "category": cat,
+        "last": row.get("last"),
+        "mark": row.get("mark") or row.get("last"),
+        "bid": row.get("bid"),
+        "ask": row.get("ask"),
+        "bid_size": row.get("bid_size"),
+        "ask_size": row.get("ask_size"),
+        "high24h": row.get("high24h"),
+        "low24h": row.get("low24h"),
+        "open24h": row.get("open24h"),
+        "change24h": row.get("change24h"),
+        "base_volume": row.get("base_volume"),
+        "quote_volume": row.get("quote_volume"),
+        "funding": row.get("funding"),
+        "open_interest": row.get("open_interest"),
+        "stale": False,
+        "source": row.get("source") or "public-feed",
+    }
+    return payload
+
+
 def ticker_payload(symbol: str, category: str | None = None) -> dict[str, Any]:
     sym = _normalize_symbol(symbol)
     cat = _normalize_category(category)
     cache_key = f"{cat}:{sym}"
+    fed = _ticker_from_feed(sym, cat)
+    if fed and fed.get("last") is not None:
+        with _lock:
+            hit = _ticker_cache.get(cache_key)
+            prev = dict(hit["payload"]) if hit else {}
+        if fed.get("change24h") is None and prev.get("change24h") is not None:
+            for key in ("change24h", "high24h", "low24h", "open24h", "funding", "open_interest", "quote_volume"):
+                if fed.get(key) is None:
+                    fed[key] = prev.get(key)
+        with _lock:
+            _ticker_cache[cache_key] = {"expires": time.monotonic() + 0.35, "payload": fed}
+        return dict(fed)
     now = time.monotonic()
     with _lock:
         hit = _ticker_cache.get(cache_key)
@@ -792,6 +848,7 @@ def ticker_payload(symbol: str, category: str | None = None) -> dict[str, Any]:
             "funding": _num(row.get("fundingRate")),
             "open_interest": _num(row.get("openInterest")),
             "stale": False,
+            "source": "bitget-rest",
         }
         if payload["open24h"] and payload["last"] is not None and abs(payload["open24h"]) > 1e-12:
             payload["change24h"] = ((payload["last"] - payload["open24h"]) / payload["open24h"]) * 100.0
@@ -1020,6 +1077,44 @@ def orderbook_payload(
     lim = ORDERBOOK_LIMIT_DEFAULT if limit is None else int(limit)
     lim = max(1, min(ORDERBOOK_LIMIT_MAX, lim))
     cache_key = f"{cat}:{sym}:{lim}"
+    try:
+        from . import public_feed
+        raw = public_feed.book(sym)
+    except Exception:
+        raw = None
+    if raw and (raw.get("asks") or raw.get("bids")):
+        asks = _with_cumulative(_book_levels(raw.get("asks"), reverse=False)[:lim])
+        bids = _with_cumulative(_book_levels(raw.get("bids"), reverse=True)[:lim])
+        best_ask = asks[0]["price"] if asks else None
+        best_bid = bids[0]["price"] if bids else None
+        spread = mid = spread_bps = None
+        if best_ask is not None and best_bid is not None:
+            spread = best_ask - best_bid
+            mid = (best_ask + best_bid) / 2.0
+            if mid > 1e-12:
+                spread_bps = (spread / mid) * 10_000.0
+        payload = {
+            "ok": True,
+            "mode": DESK_MODE,
+            "version": DESK_VERSION,
+            "ts": _utcnow(),
+            "symbol": sym,
+            "category": cat,
+            "limit": lim,
+            "bids": bids,
+            "asks": asks,
+            "best_bid": best_bid,
+            "best_ask": best_ask,
+            "spread": spread,
+            "spread_bps": spread_bps,
+            "mid": mid,
+            "book_ts": raw.get("ts"),
+            "stale": False,
+            "source": raw.get("source") or "public-feed",
+        }
+        with _lock:
+            _orderbook_cache[cache_key] = {"expires": time.monotonic() + 0.25, "payload": payload}
+        return payload
     now = time.monotonic()
     with _lock:
         hit = _orderbook_cache.get(cache_key)
@@ -1068,6 +1163,7 @@ def orderbook_payload(
             "mid": mid,
             "book_ts": book_ts,
             "stale": False,
+            "source": "bitget-rest",
         }
         with _lock:
             _orderbook_cache[cache_key] = {
@@ -1106,6 +1202,27 @@ def trades_payload(
     lim = TRADES_LIMIT_DEFAULT if limit is None else int(limit)
     lim = max(1, min(TRADES_LIMIT_MAX, lim))
     cache_key = f"{cat}:{sym}:{lim}"
+    try:
+        from . import public_feed
+        fed = public_feed.trades(sym, lim)
+    except Exception:
+        fed = []
+    if fed:
+        payload = {
+            "ok": True,
+            "mode": DESK_MODE,
+            "version": DESK_VERSION,
+            "ts": _utcnow(),
+            "symbol": sym,
+            "category": cat,
+            "trades": fed[:lim],
+            "count": min(len(fed), lim),
+            "stale": False,
+            "source": fed[0].get("source") or "public-feed",
+        }
+        with _lock:
+            _trades_cache[cache_key] = {"expires": time.monotonic() + 0.25, "payload": payload}
+        return payload
     now = time.monotonic()
     with _lock:
         hit = _trades_cache.get(cache_key)
@@ -1135,6 +1252,7 @@ def trades_payload(
             "trades": trades,
             "count": len(trades),
             "stale": False,
+            "source": "bitget-rest",
         }
         with _lock:
             _trades_cache[cache_key] = {
@@ -1160,6 +1278,30 @@ def trades_payload(
             str(exc),
             {"trades": [], "count": 0},
         )
+
+
+def market_snapshot(
+    symbol: str,
+    category: str | None = None,
+    book_limit: int | None = 20,
+    trade_limit: int | None = 40,
+) -> dict[str, Any]:
+    """Ticker + book + tape from the public feed (REST fallback)."""
+    ticker = ticker_payload(symbol, category)
+    book = orderbook_payload(symbol, category, book_limit)
+    tape = trades_payload(symbol, category, trade_limit)
+    return {
+        "ok": bool(ticker.get("ok") or book.get("ok") or tape.get("ok")),
+        "mode": DESK_MODE,
+        "version": DESK_VERSION,
+        "ts": _utcnow(),
+        "symbol": ticker.get("symbol") or symbol,
+        "category": ticker.get("category") or category or "USDT-FUTURES",
+        "ticker": ticker,
+        "book": book,
+        "tape": tape,
+        "feed": _feed_status(),
+    }
 
 
 def trade_preview(body: dict[str, Any] | None) -> dict[str, Any]:
@@ -1269,6 +1411,11 @@ def trade_place(body: dict[str, Any] | None) -> tuple[int, dict[str, Any]]:
 
 def warm_cache() -> None:
     """Background warm so the first browser hit is not a cold Bitget round-trip."""
+    try:
+        from . import public_feed
+        public_feed.start()
+    except Exception:
+        pass
     try:
         get_snapshot(force=True)
     except Exception:
