@@ -13,11 +13,11 @@
   <link rel="icon" type="image/svg+xml" href="./favicon.svg">
   <link rel="manifest" href="./manifest.webmanifest">
   <link rel="apple-touch-icon" sizes="180x180" href="./apple-touch-icon.png">
-  <link rel="stylesheet" href="./styles.css?v=desk-2.4.2">
-  <link rel="stylesheet" href="./premium.css?v=desk-2.4.2">
-  <link rel="stylesheet" href="./terminal.css?v=desk-2.4.2">
+  <link rel="stylesheet" href="./styles.css?v=desk-2.6.0">
+  <link rel="stylesheet" href="./premium.css?v=desk-2.6.0">
+  <link rel="stylesheet" href="./terminal.css?v=desk-2.6.0">
   <script src="./lightweight-charts.js" defer></script>
-  <script src="./app.js?v=desk-2.4.2" defer></script>
+  <script src="./app.js?v=desk-2.6.0" defer></script>
 </head>
 <body class="hl-shell">
   <a class="skip" href="#main">Skip to desk</a>
@@ -88,7 +88,7 @@
         <span>Equity</span>
         <strong id="top-equity">—</strong>
       </div>
-      <div class="hl-acct-cell">
+      <div class="hl-acct-cell" id="m-port-hit" data-view="portfolio">
         <span>uPnL</span>
         <strong id="top-upnl">—</strong>
       </div>
@@ -132,9 +132,11 @@
             <p class="chart-foot" id="chart-foot">Bitget public candles</p>
           </div>
           <div id="tv-chart" class="tv-chart" role="img" aria-label="Price chart"></div>
+          <button type="button" id="m-pos-card" class="m-pos-card" hidden></button>
         </section>
 
         <aside class="hl-depth pane" data-pane="book" aria-label="Order book and tape">
+          <button type="button" class="sheet-grab" data-close-sheet aria-label="Close book"><i></i></button>
           <div class="hl-depth-tabs" role="tablist" aria-label="Book or trades">
             <button type="button" class="active" data-depth="book">Order book</button>
             <button type="button" data-depth="tape">Trades</button>
@@ -157,7 +159,9 @@
         </aside>
 
         <aside class="hl-ticket pane" data-pane="ticket" aria-label="Order ticket">
+          <button type="button" class="sheet-grab" data-close-sheet aria-label="Close ticket"><i></i></button>
           <form class="trade-ticket" id="trade-form" autocomplete="off">
+            <div class="ticket-scroll">
             <div class="ticket-head pad-hide">
               <div>
                 <h2>Place order</h2>
@@ -185,7 +189,7 @@
 
             <div id="open-pos-strip" class="open-pos-strip" hidden></div>
 
-            <div class="ticket-symbol-row pad-hide">
+            <div class="ticket-symbol-row">
               <label class="field compact">
                 <span>Contract</span>
                 <select id="t-symbol" name="symbol">
@@ -226,7 +230,7 @@
             </div>
             <p class="field-hint" hidden>Margin mode: <strong id="t-margin-mode">crossed</strong></p>
 
-            <div class="slider-block">
+            <div class="slider-block lev-block">
               <div class="slider-head">
                 <span>Leverage</span>
                 <strong><span id="t-lev-readout">25</span>×</strong>
@@ -242,7 +246,7 @@
               <button type="button" class="size-mode-btn active" data-size-mode="usdt">USDT</button>
             </div>
 
-            <label class="field compact">
+            <label class="field compact size-field">
               <span id="t-size-label">Amount (USDT)</span>
               <div class="size-input-row">
                 <input id="t-size" type="number" step="any" min="0" inputmode="decimal" placeholder="0.00" required>
@@ -250,7 +254,7 @@
               </div>
             </label>
 
-            <div class="slider-block">
+            <div class="slider-block pct-block">
               <div class="slider-head">
                 <span>% of available</span>
                 <strong><span id="t-pct-readout">0</span>%</strong>
@@ -271,7 +275,7 @@
               <div><span>Liq (est.)</span><strong id="t-liq-est">—</strong></div>
             </div>
 
-            <div class="row-2">
+            <div class="row-2 m-hide">
               <label class="field compact">
                 <span>Take profit <em>opt</em></span>
                 <input id="t-tp" type="number" step="any" inputmode="decimal" placeholder="—">
@@ -282,6 +286,7 @@
               </label>
             </div>
 
+            </div>
             <div class="ticket-actions exchange-actions">
               <button type="submit" class="primary-button side-action long" id="btn-simulate">Buy / Long</button>
               <button type="button" class="secondary-button" id="btn-live" disabled title="Needs Kane LIVE OK">LIVE · locked</button>
@@ -294,6 +299,7 @@
       </div>
 
       <section class="hl-dock pane" data-pane="dock" aria-label="Positions and scalper">
+          <button type="button" class="sheet-grab" data-close-sheet aria-label="Close positions"><i></i></button>
         <div class="hl-dock-tabs" role="tablist" aria-label="Bottom dock">
           <button type="button" class="active" data-dock="positions">Positions <span id="pos-count">—</span></button>
           <button type="button" data-dock="history">History</button>
@@ -476,6 +482,13 @@
     </div>
   </main>
 
+  <button type="button" class="m-scrim" id="m-scrim" hidden data-close-sheet aria-label="Dismiss"></button>
+  <nav class="m-action-bar" aria-label="Trade actions">
+    <button type="button" class="m-aux" data-pane="book" aria-label="Order book"><span>Book</span></button>
+    <button type="button" class="m-buy" data-ticket-side="long"><span>Buy</span></button>
+    <button type="button" class="m-sell" data-ticket-side="short"><span>Sell</span></button>
+    <button type="button" class="m-aux" data-pane="dock" aria-label="Open positions"><span id="m-pos-n">Pos</span></button>
+  </nav>
   <nav class="hl-bottom-nav" aria-label="Mobile">
     <a href="#trade" data-view="trade" class="nav-link active"><span data-icon="arrows"></span>Trade</a>
     <button type="button" id="nav-dock" data-pane="dock"><span data-icon="grid"></span>Positions</button>

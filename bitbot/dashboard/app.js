@@ -4,8 +4,8 @@
   const POLL_POS_MS = 3000;
   const POLL_TICK_MS = 2000;
   const POLL_CANDLE_MS = 15000;
-  const POLL_BOOK_MS = 900;
-  const POLL_TAPE_MS = 1500;
+  const POLL_BOOK_MS = 400;
+  const POLL_TAPE_MS = 700;
 
   const state = {
     view: 'trade',
@@ -166,16 +166,20 @@
     if ($('#crumb')) $('#crumb').textContent = t;
     if (name === 'portfolio') {
       ensureEquityChart();
+      stopMarketStream();
+      if (isPhone()) closeSheet();
     }
     if (name === 'trade') {
       paintTradeBalances();
       refreshTradeMark();
       updateSideAction();
+      paintActionBar();
       ensureChart();
       loadCandles(true);
       loadTicker();
       loadOrderbook();
       loadTape();
+      startMarketStream();
     }
   }
 
@@ -544,12 +548,14 @@
     selectSymbol(sym);
     location.hash = 'trade';
     setView('trade');
+    if (isPhone()) closeSheet();
   }
 
   function goTrade(sym) {
     selectSymbol(sym);
     location.hash = 'trade';
     setView('trade');
+    if (isPhone()) openTicket(state.side);
   }
 
   function positionRow(p) {
@@ -589,8 +595,7 @@
     state.positions = list || [];
     const root = $('#positions-hero');
     const body = $('#positions-body');
-    if ($('#nav-pos')) $('#nav-pos').textContent = String(state.positions.length || 0);
-    if ($('#pos-count')) $('#pos-count').textContent = `${state.positions.length} open`;
+    paintPosCount();
     if (!state.positions.length) {
       if (root) root.innerHTML = '<div class="empty-pos card">No open UTA positions.</div>';
       if (body) body.innerHTML = '<tr><td colspan="11" class="empty-cell">No open positions.</td></tr>';
@@ -638,6 +643,7 @@
     loadTicker();
     loadOrderbook();
     loadTape();
+    startMarketStream();
     refreshTradeMark();
   }
 
@@ -707,8 +713,9 @@
 
   function paintOpenPosStrip() {
     const el = $('#open-pos-strip');
-    if (!el) return;
     const pos = currentPosition();
+    paintMobilePosCard();
+    if (!el) return;
     if (!pos) {
       el.hidden = true;
       el.innerHTML = '';
@@ -843,6 +850,9 @@
   let deskSource = null;
   let deskPollTimer = null;
   let deskStreamHealthy = false;
+  let marketSource = null;
+  let marketStreamHealthy = false;
+  let marketStreamSym = '';
 
   function stopDeskStream() {
     if (deskSource) {
@@ -1001,7 +1011,7 @@
 
   function paintTradeMarkers() {
     if (!state.series) return;
-    const markers = buildTradeMarkers(state.fills, state.bars);
+    const markers = isPhone() ? [] : buildTradeMarkers(state.fills, state.bars);
     try {
       state.series.setMarkers(markers);
     } catch (err) {
@@ -1045,12 +1055,16 @@
       layout: {
         background: { color: '#0b0f13' },
         textColor: '#8b98a4',
+        attributionLogo: false,
       },
       grid: {
         vertLines: { color: 'rgba(255,255,255,0.04)' },
         horzLines: { color: 'rgba(255,255,255,0.04)' },
       },
-      rightPriceScale: { borderColor: 'rgba(255,255,255,0.08)' },
+      rightPriceScale: {
+        borderColor: 'rgba(255,255,255,0.08)',
+        scaleMargins: isPhone() ? { top: 0.04, bottom: 0.12 } : { top: 0.08, bottom: 0.08 },
+      },
       timeScale: { borderColor: 'rgba(255,255,255,0.08)', timeVisible: true, secondsVisible: false },
       crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
       width: el.clientWidth,
@@ -1111,11 +1125,25 @@
     }
   }
 
-  async function loadTicker() {
-    try {
-      const { data } = await api(`/api/ticker?symbol=${encodeURIComponent(state.symbol)}&category=${encodeURIComponent(state.category)}`);
-      if (!data || !data.ok) return;
-      const last = data.mark || data.last;
+  function bumpLastCandle(price) {
+    if (!state.series || !state.bars.length) return;
+    const px = Number(price);
+    if (!Number.isFinite(px) || px <= 0) return;
+    const last = state.bars[state.bars.length - 1];
+    const next = {
+      time: last.time,
+      open: last.open,
+      high: Math.max(last.high, px),
+      low: Math.min(last.low, px),
+      close: px,
+    };
+    state.bars[state.bars.length - 1] = next;
+    try { state.series.update(next); } catch { /* ignore */ }
+  }
+
+  function applyTicker(data) {
+    if (!data || !data.ok) return;
+    const last = data.mark || data.last;
       const lastText = fmtPx(last);
       if ($('#chart-last')) $('#chart-last').textContent = lastText;
       if ($('#mh-last')) $('#mh-last').textContent = fmtPx(data.last || last);
@@ -1150,7 +1178,67 @@
             priceLineVisible: true,
           });
         } catch { /* ignore */ }
+        bumpLastCandle(data.last || data.mark);
       }
+  }
+
+  function applyMarketSnapshot(snap) {
+    if (!snap) return;
+    if (snap.ticker) applyTicker(snap.ticker);
+    if (snap.book && snap.book.ok) renderBook(snap.book);
+    if (snap.tape && snap.tape.ok) renderTape(snap.tape.trades);
+    if (snap.feed && snap.feed.ws === 'up') setConn('good', 'Live');
+  }
+
+  function stopMarketStream() {
+    if (marketSource) {
+      marketSource.close();
+      marketSource = null;
+    }
+    marketStreamHealthy = false;
+    marketStreamSym = '';
+  }
+
+  function startMarketStream() {
+    if (!('EventSource' in window) || state.view !== 'trade') return;
+    const key = `${state.symbol}|${state.category}`;
+    if (marketSource && marketStreamSym === key && marketStreamHealthy) return;
+    stopMarketStream();
+    const url = new URL('api/market/stream', document.baseURI);
+    url.searchParams.set('symbol', state.symbol);
+    url.searchParams.set('category', state.category);
+    const current = new EventSource(url);
+    marketSource = current;
+    marketStreamSym = key;
+    current.addEventListener('hello', () => {
+      if (marketSource !== current) return;
+      marketStreamHealthy = true;
+    });
+    current.addEventListener('market', (event) => {
+      if (marketSource !== current) return;
+      try {
+        const data = JSON.parse(event.data);
+        marketStreamHealthy = true;
+        applyMarketSnapshot(data);
+      } catch {
+        marketStreamHealthy = false;
+      }
+    });
+    current.addEventListener('unavailable', () => {
+      if (marketSource !== current) return;
+      marketStreamHealthy = false;
+    });
+    current.onerror = () => {
+      if (marketSource !== current) return;
+      marketStreamHealthy = false;
+    };
+  }
+
+  async function loadTicker() {
+    if (marketStreamHealthy) return;
+    try {
+      const { data } = await api(`/api/ticker?symbol=${encodeURIComponent(state.symbol)}&category=${encodeURIComponent(state.category)}`);
+      applyTicker(data);
     } catch { /* ignore */ }
   }
 
@@ -1227,7 +1315,7 @@
   }
 
   async function loadOrderbook() {
-    if (state.view !== 'trade') return;
+    if (state.view !== 'trade' || marketStreamHealthy) return;
     try {
       const { data } = await api(
         `/api/orderbook?symbol=${encodeURIComponent(state.symbol)}&category=${encodeURIComponent(state.category)}&limit=20`,
@@ -1259,7 +1347,7 @@
   }
 
   async function loadTape() {
-    if (state.view !== 'trade') return;
+    if (state.view !== 'trade' || marketStreamHealthy) return;
     try {
       const { data } = await api(
         `/api/trades?symbol=${encodeURIComponent(state.symbol)}&category=${encodeURIComponent(state.category)}&limit=40`,
@@ -1362,6 +1450,7 @@
     btn.classList.toggle('short', !long);
     const ticket = $('#trade-form');
     if (ticket) ticket.dataset.side = state.side;
+    paintActionBar();
   }
 
   function updateCostStrip() {
@@ -1545,6 +1634,166 @@
     });
   }
 
+  function isPhone() {
+    return window.matchMedia('(max-width: 900px)').matches;
+  }
+
+  function mobilePane() {
+    const trade = $('.hl-trade');
+    return (trade && trade.dataset.mobilePane) || 'chart';
+  }
+
+  function resizeChartSoon() {
+    requestAnimationFrame(() => {
+      if (!state.chart) return;
+      const el = $('#tv-chart');
+      if (!el) return;
+      state.chart.applyOptions({
+        width: el.clientWidth,
+        height: Math.max(220, el.clientHeight),
+      });
+    });
+  }
+
+  function paintPosCount() {
+    const n = state.positions.length || 0;
+    if ($('#m-pos-n')) $('#m-pos-n').textContent = n ? `Pos ${n}` : 'Pos';
+    if ($('#nav-pos')) $('#nav-pos').textContent = String(n);
+    if ($('#pos-count')) $('#pos-count').textContent = `${n} open`;
+  }
+
+  function paintMobilePosCard() {
+    const card = $('#m-pos-card');
+    if (!card) return;
+    const pos = currentPosition() || state.positions[0] || null;
+    if (!pos) {
+      card.hidden = true;
+      card.innerHTML = '';
+      return;
+    }
+    const side = (pos.side || '').toLowerCase();
+    card.hidden = false;
+    card.innerHTML = `
+      <span><strong>${pairLabel(pos.symbol)}</strong><i class="${side}">${side}</i>${pos.leverage != null ? `${fmt(pos.leverage, 0)}×` : ''}</span>
+      <strong class="${pnlClass(pos.unrealised_pnl)}">${money(pos.unrealised_pnl)}</strong>`;
+  }
+
+  function paintActionBar() {
+    const pane = mobilePane();
+    const ticketOpen = pane === 'ticket';
+    $$('.m-action-bar [data-pane]').forEach((b) => {
+      b.classList.toggle('active', b.dataset.pane === pane);
+    });
+    $$('.m-action-bar [data-ticket-side]').forEach((b) => {
+      b.classList.toggle('active', ticketOpen && b.dataset.ticketSide === state.side);
+    });
+    $$('.hl-mobile-panes button').forEach((b) => {
+      b.classList.toggle('active', b.dataset.pane === pane);
+    });
+  }
+
+  function setMobilePane(pane) {
+    const trade = $('.hl-trade');
+    if (!trade) return;
+    const next = pane || 'chart';
+    trade.dataset.mobilePane = next;
+    const open = isPhone() && next !== 'chart';
+    document.body.classList.toggle('sheet-open', open);
+    const scrim = $('#m-scrim');
+    if (scrim) scrim.hidden = !open;
+    paintActionBar();
+    if (next === 'chart' || next === 'book') resizeChartSoon();
+  }
+
+  function closeSheet() {
+    setMobilePane('chart');
+  }
+
+  function setTicketSide(side) {
+    if (side !== 'long' && side !== 'short') return;
+    state.side = side;
+    $$('.side-btn').forEach((b) => b.classList.toggle('active', b.dataset.side === side));
+    updateSideAction();
+    updateCostStrip();
+    queuePreview();
+  }
+
+  function openTicket(side) {
+    if (side) setTicketSide(side);
+    if (state.view !== 'trade') {
+      location.hash = 'trade';
+      setView('trade');
+    }
+    if (!isPhone()) return;
+    setMobilePane('ticket');
+    const scroller = $('.ticket-scroll') || $('#trade-form');
+    if (scroller) scroller.scrollTop = 0;
+  }
+
+  function openSheet(pane) {
+    if (state.view !== 'trade') {
+      location.hash = 'trade';
+      setView('trade');
+    }
+    if (!isPhone()) return;
+    if (pane === 'ticket') {
+      openTicket();
+      return;
+    }
+    setMobilePane(pane || 'chart');
+  }
+
+  function wireMobile() {
+    $$('[data-ticket-side]').forEach((btn) => {
+      btn.addEventListener('click', () => openTicket(btn.dataset.ticketSide));
+    });
+    const portHit = $('#m-port-hit');
+    if (portHit) {
+      portHit.addEventListener('click', () => {
+        if (!isPhone()) return;
+        location.hash = 'portfolio';
+        setView('portfolio');
+      });
+    }
+    $$('[data-close-sheet]').forEach((el) => {
+      el.addEventListener('click', closeSheet);
+    });
+    const card = $('#m-pos-card');
+    if (card) {
+      card.addEventListener('click', () => {
+        const pos = currentPosition() || state.positions[0];
+        if (pos && pos.symbol) selectSymbol(pos.symbol);
+        openSheet('dock');
+      });
+    }
+    document.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Escape' && isPhone() && mobilePane() !== 'chart') {
+        ev.preventDefault();
+        closeSheet();
+      }
+    });
+    window.addEventListener('resize', () => {
+      if (!isPhone()) {
+        document.body.classList.remove('sheet-open');
+        const scrim = $('#m-scrim');
+        if (scrim) scrim.hidden = true;
+        const trade = $('.hl-trade');
+        if (trade) trade.dataset.mobilePane = 'chart';
+        paintActionBar();
+      }
+    });
+    $$('.sheet-grab').forEach((grab) => {
+      let startY = 0;
+      grab.addEventListener('touchstart', (ev) => {
+        if (ev.touches[0]) startY = ev.touches[0].clientY;
+      }, { passive: true });
+      grab.addEventListener('touchend', (ev) => {
+        const y = ev.changedTouches && ev.changedTouches[0] && ev.changedTouches[0].clientY;
+        if (y != null && y - startY > 40) closeSheet();
+      });
+    });
+  }
+
   function wireNav() {
     $$('.nav-link').forEach((a) => {
       a.addEventListener('click', (ev) => {
@@ -1596,23 +1845,17 @@
       btn.addEventListener('click', () => {
         const pane = btn.dataset.pane;
         if (!pane) return;
-        const trade = $('.hl-trade');
-        if (trade) trade.dataset.mobilePane = pane;
-        $$('.hl-mobile-panes button').forEach((b) => b.classList.toggle('active', b.dataset.pane === pane));
+        if (isPhone() && pane === mobilePane() && pane !== 'chart') {
+          closeSheet();
+          return;
+        }
         if (pane === 'chart') {
+          closeSheet();
           ensureChart();
-          if (state.chart) {
-            const el = $('#tv-chart');
-            state.chart.applyOptions({
-              width: el.clientWidth,
-              height: Math.max(220, el.clientHeight),
-            });
-          }
+          resizeChartSoon();
+          return;
         }
-        if (pane === 'dock' && location.hash !== '#trade') {
-          location.hash = 'trade';
-          setView('trade');
-        }
+        openSheet(pane);
       });
     });
   }
@@ -1824,6 +2067,7 @@
     loadEquityTicks();
     wireArt();
     wireNav();
+    wireMobile();
     wireTrade();
     buildSymbolSwitch();
     setView(hashView());
@@ -1839,9 +2083,14 @@
       navigator.serviceWorker.register('./service-worker.js').catch(() => {});
     }
     startDeskStream();
-    window.addEventListener('pagehide', stopDeskStream);
+    startMarketStream();
+    window.addEventListener('pagehide', () => {
+      stopDeskStream();
+      stopMarketStream();
+    });
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden && !deskStreamHealthy) startDeskStream();
+      if (!document.hidden && state.view === 'trade' && !marketStreamHealthy) startMarketStream();
     });
     setInterval(() => {
       if (state.view === 'trade') loadTicker();

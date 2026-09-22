@@ -5,9 +5,16 @@ import unittest
 from unittest.mock import patch
 
 from . import live_desk
+from . import public_feed
 
 
 class OrderbookTests(unittest.TestCase):
+    def setUp(self):
+        public_feed.reset_for_tests()
+        with live_desk._lock:
+            live_desk._orderbook_cache.clear()
+            live_desk._ticker_cache.clear()
+            live_desk._trades_cache.clear()
     def test_levels_sort_and_skip_junk(self):
         asks = live_desk._book_levels(
             [[101, 2], ["100.5", "1"], None, {"price": 99, "size": 3}, [0, 1], [-1, 1]],
@@ -62,6 +69,11 @@ class OrderbookTests(unittest.TestCase):
 
 
 class TradesTests(unittest.TestCase):
+    def setUp(self):
+        public_feed.reset_for_tests()
+        with live_desk._lock:
+            live_desk._trades_cache.clear()
+            live_desk._ticker_cache.clear()
     def test_public_trade_normalise(self):
         row = live_desk._normalize_public_trade(
             {
@@ -105,6 +117,8 @@ class TradesTests(unittest.TestCase):
 
 
 class PositionsBookTests(unittest.TestCase):
+    def setUp(self):
+        public_feed.reset_for_tests()
     def test_positions_payload_keeps_hype_and_sol_longs(self):
         snap = {
             "ok": True,
@@ -165,6 +179,65 @@ class PositionsBookTests(unittest.TestCase):
         self.assertTrue(payload["ok"])
         self.assertEqual(payload["symbol"], "HYPEUSDT")
         self.assertAlmostEqual(payload["mark"], 93.053)
+
+
+class PublicFeedTests(unittest.TestCase):
+    def setUp(self):
+        public_feed.reset_for_tests()
+        with live_desk._lock:
+            live_desk._ticker_cache.clear()
+            live_desk._orderbook_cache.clear()
+            live_desk._trades_cache.clear()
+
+    def test_ingest_bitget_ticker_and_books(self):
+        public_feed.ingest_message({
+            "arg": {"instType": "USDT-FUTURES", "channel": "ticker", "instId": "SOLUSDT"},
+            "data": [{
+                "lastPr": "118.2",
+                "markPr": "118.1",
+                "bidPr": "118.19",
+                "askPr": "118.21",
+                "open24h": "110",
+            }],
+        })
+        public_feed.ingest_message({
+            "arg": {"channel": "books15", "instId": "SOLUSDT"},
+            "data": [{"asks": [["118.21", "4"]], "bids": [["118.19", "3"]], "ts": "9"}],
+        })
+        public_feed.ingest_message({
+            "arg": {"channel": "trade", "instId": "SOLUSDT"},
+            "data": [{"tradeId": "t1", "price": "118.2", "size": "1.2", "side": "buy", "ts": "1700000000000"}],
+        })
+        tick = live_desk.ticker_payload("SOLUSDT")
+        self.assertTrue(tick["ok"])
+        self.assertEqual(tick["source"], "bitget-ws")
+        self.assertAlmostEqual(tick["last"], 118.2)
+        self.assertGreater(tick["change24h"], 0)
+        book = live_desk.orderbook_payload("SOLUSDT", limit=20)
+        self.assertEqual(book["source"], "bitget-ws")
+        self.assertEqual(book["best_ask"], 118.21)
+        tape = live_desk.trades_payload("SOLUSDT")
+        self.assertEqual(tape["trades"][0]["id"], "t1")
+        self.assertEqual(tape["source"], "bitget-ws")
+
+    def test_binance_does_not_clobber_fresh_bitget(self):
+        public_feed.ingest_message({
+            "arg": {"channel": "ticker", "instId": "SOLUSDT"},
+            "data": [{"lastPr": "100", "markPr": "100", "bidPr": "99.9", "askPr": "100.1"}],
+        })
+        public_feed.ingest_binance_book("SOLUSDT", {"bidPrice": "1", "askPrice": "2", "bidQty": "9", "askQty": "9"})
+        tick = public_feed.ticker("SOLUSDT")
+        self.assertAlmostEqual(tick["last"], 100)
+
+    def test_market_snapshot_prefers_feed(self):
+        public_feed.ingest_message({
+            "arg": {"channel": "ticker", "instId": "HYPEUSDT"},
+            "data": [{"lastPr": "93.5", "markPr": "93.4", "bidPr": "93.4", "askPr": "93.6"}],
+        })
+        snap = live_desk.market_snapshot("HYPEUSDT")
+        self.assertTrue(snap["ok"])
+        self.assertEqual(snap["ticker"]["source"], "bitget-ws")
+        self.assertAlmostEqual(snap["ticker"]["mark"], 93.4)
 
 
 if __name__ == "__main__":

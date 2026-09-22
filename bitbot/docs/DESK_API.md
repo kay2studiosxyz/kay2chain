@@ -9,7 +9,7 @@ Mode default is **PAPER_WATCH**. LIVE order placement stays locked unless
 
 ### `GET /api/health`
 ```json
-{ "ok": true, "service": "bitbot-dashboard", "mode": "PAPER_WATCH", "version": "desk-2.4.0", "ts": "…", "live_trading": false, "live_lock": "…" }
+{ "ok": true, "service": "bitbot-dashboard", "mode": "PAPER_WATCH", "version": "desk-2.6.0", "ts": "…", "live_trading": false, "live_lock": "…" }
 ```
 
 ### `GET /api/desk`
@@ -33,8 +33,14 @@ Sanitized UTA equity / MMR / IMR (no keys).
 ### `GET /api/positions`
 Open UTA positions with mark, unrealised PnL, liq, break-even, margin, pnl_pct, distance_to_liq_pct. Cached ~3s.
 
+### `GET /api/market?symbol=&category=`
+Ticker + book + tape in one payload. Sourced from the keyless Bitget public WebSocket when live, else Bitget REST / Binance bookTicker / Bybit linear.
+
+### `GET /api/market/stream?symbol=&category=`
+SSE (~150ms) for scalp tape. Events: `hello`, `market` (same shape as `GET /api/market`), `unavailable`. ~60s lifetime.
+
 ### `GET /api/ticker?symbol=&category=`
-Public Bitget ticker (proxied). `category` default `USDT-FUTURES`.
+Public ticker (Bitget WS first). `category` default `USDT-FUTURES`. `source` is `bitget-ws`, `bitget-rest`, `binance-rest`, or `bybit-rest`.
 ```json
 { "ok": true, "symbol": "SOLUSDT", "category": "USDT-FUTURES", "last": 108.3, "mark": 108.3, "bid": …, "ask": …, "change24h": -3.0, "funding": 0.0001, "stale": false }
 ```
